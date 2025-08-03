@@ -41,3 +41,15 @@ var/
 
 # Mypy cache
 .mypy_cache/
+
+# input data, saved log, checkpoints
+**/data/
+**/runs/
+**/input/
+**/saved/
+**/datasets/
+
+# editor, os cache directory
+.vscode/
+.idea/
+__MACOSX/
