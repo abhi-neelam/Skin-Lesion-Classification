@@ -54,3 +54,13 @@ var/
 .vscode/
 .idea/
 __MACOSX/
+
+# Environments
+.env
+.envrc
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
