@@ -1,5 +1,4 @@
 import os
-import sys
 import pandas as pd
 import numpy as np
 import shutil
@@ -8,7 +7,7 @@ num_classes = 8
 
 data_folder_path = "../data/ISIC_2019_Training_Input"
 annotations_file = "../data/ISIC_2019_Training_GroundTruth.csv"
-out_dir = "ISIC_2019"
+out_dir = "../data/ISIC_2019_timm"
 
 os.makedirs(out_dir, exist_ok=True) # create the output dir
 
