@@ -22,6 +22,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from imblearn.metrics import sensitivity_score, specificity_score
 import matplotlib.pyplot as plt
 from functools import partial
+from collections import OrderedDict
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -66,8 +67,35 @@ def experiment_name(args):
             '224'
         ])
 
-def validate(model, loader_eval, validate_loss_fn, args, device):
-    pass
+def validate(model, loader, loss_fn, device):
+    losses_m = utils.AverageMeter()
+    top1_m = utils.AverageMeter()
+    top5_m = utils.AverageMeter()
+
+    model.eval()
+
+    with torch.inference_mode():
+        for batch_idx, (input, target) in enumerate(loader):
+            input = input.to(device=device, dtype=torch.float32, non_blocking=True)
+            target = target.to(device=device, non_blocking=True)
+
+            output = model(input)
+            if isinstance(output, (tuple, list)):
+                output = output[0]
+
+            loss = loss_fn(output, target)
+            acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
+
+            reduced_loss = loss.data
+
+            batch_size = output.shape[0]
+
+            losses_m.update(reduced_loss.item(), batch_size)
+            top1_m.update(acc1.item(), batch_size)
+            top5_m.update(acc5.item(), batch_size)
+
+    metrics = OrderedDict([('loss', losses_m.avg), ('top1', top1_m.avg), ('top5', top5_m.avg)])
+    return metrics
 
 def parse_args():
     parser = argparse.ArgumentParser(description='PyTorch Training')
@@ -249,10 +277,17 @@ def main():
                     model,
                     loader_eval,
                     validate_loss_fn,
-                    args,
                     device=device,
                 )
         
+        utils.update_summary(
+            epoch,
+            train_metrics,
+            eval_metrics,
+            filename=os.path.join(output_dir, 'summary.csv'),
+            log_wandb=args.log_wandb
+        )
+
         # TODO - UPDATE SUMMARY.CSV HERE
 
         saver.save_checkpoint(epoch)
