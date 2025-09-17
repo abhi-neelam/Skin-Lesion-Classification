@@ -28,7 +28,6 @@ import pandas as pd
 import numpy as np
 import random
 import time
-import sys
 import os
 
 class LightWeight_Baseline(nn.Module):
@@ -67,6 +66,33 @@ def experiment_name(args):
             '224'
         ])
 
+def train_one_epoch(model, loader, optimizer, loss_fn, device):
+    losses_m = utils.AverageMeter()
+
+    model.train()
+
+    optimizer.zero_grad()
+    for batch_idx, (input, target) in enumerate(loader):
+        batch_size = input.shape[0]
+
+        input = input.to(device=device)
+        target = target.to(device=device)
+
+        output = model(input)
+        if isinstance(output, (tuple, list)):
+            output = output[0]
+
+        loss = loss_fn(output, target)
+
+        loss.backward()
+        optimizer.step()
+        
+        losses_m.update(loss.item(), batch_size)
+
+        optimizer.zero_grad()
+
+    return OrderedDict([('loss', losses_m.avg)])
+
 def validate(model, loader, loss_fn, device):
     losses_m = utils.AverageMeter()
     top1_m = utils.AverageMeter()
@@ -76,8 +102,10 @@ def validate(model, loader, loss_fn, device):
 
     with torch.inference_mode():
         for batch_idx, (input, target) in enumerate(loader):
-            input = input.to(device=device, dtype=torch.float32, non_blocking=True)
-            target = target.to(device=device, non_blocking=True)
+            batch_size = input.shape[0]
+
+            input = input.to(device=device)
+            target = target.to(device=device)
 
             output = model(input)
             if isinstance(output, (tuple, list)):
@@ -86,11 +114,7 @@ def validate(model, loader, loss_fn, device):
             loss = loss_fn(output, target)
             acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
 
-            reduced_loss = loss.data
-
-            batch_size = output.shape[0]
-
-            losses_m.update(reduced_loss.item(), batch_size)
+            losses_m.update(loss.item(), batch_size)
             top1_m.update(acc1.item(), batch_size)
             top5_m.update(acc5.item(), batch_size)
 
@@ -101,18 +125,18 @@ def parse_args():
     parser = argparse.ArgumentParser(description='PyTorch Training')
 
     group = parser.add_argument_group('Dataset parameters')
-    group.add_argument('--data-dir', metavar='DIR', help='path to dataset (root dir)')
+    group.add_argument('--data-dir', metavar='DIR', help='path to dataset (root dir)', required=True)
 
     group = parser.add_argument_group('Model parameters')
-    group.add_argument('--model', default='mobilenetv3_large_100', type=str, metavar='MODEL',
+    group.add_argument('--model', required=True, default='mobilenetv3_large_100', type=str, metavar='MODEL',
                    help='Name of model to train (default: "mobilenetv3_large_100")')
     group.add_argument('--pretrained', action='store_true', default=False,
                    help='Start with pretrained version of specified network (if avail)')
     
     group.add_argument('--num-classes', type=int, default=None, metavar='N',
-                   help='number of label classes (Model default if None)')
-    group.add_argument('-b', '--batch-size', type=int, default=128, metavar='N',
-                   help='Input batch size for training (default: 128)')
+                   help='number of label classes (Model default if None)', required=True)
+    group.add_argument('-b', '--batch-size', type=int, default=32, metavar='N',
+                   help='Input batch size for training (default: 32)')
     
     group = parser.add_argument_group('Device parameters')
     group.add_argument('--device', default='cuda', type=str,
@@ -123,7 +147,7 @@ def parse_args():
                     help='weight decay (default: 2e-5)')
 
     group = parser.add_argument_group('Learning rate schedule parameters')
-    group.add_argument('--lr', type=float, default=None, metavar='LR',
+    group.add_argument('--lr', type=float, default=1e-3, metavar='LR',
                    help='learning rate, overrides lr-base if set (default: None)')
     group.add_argument('--epochs', type=int, default=300, metavar='N',
                    help='number of epochs to train (default: 300)')
@@ -139,8 +163,6 @@ def parse_args():
     group = parser.add_argument_group('Miscellaneous parameters')
     group.add_argument('--seed', type=int, default=42, metavar='S',
                    help='random seed (default: 42)')
-    group.add_argument('--output', default='', type=str, metavar='PATH',
-                   help='path to output folder (default: none, current dir)')
     group.add_argument('--checkpoint-hist', type=int, default=10, metavar='N',
                    help='number of checkpoints to keep (default: 10)')
     group.add_argument('-j', '--workers', type=int, default=4, metavar='N',
@@ -148,16 +170,14 @@ def parse_args():
     group.add_argument('--pin-mem', action='store_true', default=False,
                    help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     group.add_argument('--output', default='', type=str, metavar='PATH',
-                   help='path to output folder (default: none, current dir)')
+                   help='path to output folder (default: none, current dir)', required=True)
     group.add_argument('--experiment', default='', type=str, metavar='NAME',
-                   help='name of train experiment, name of sub-folder for output')
+                   help='name of train experiment, name of sub-folder for output', required=True)
     
-    group.add_argument('--log-wandb', action='store_true', default=False,
-                   help='log training and validation metrics to wandb')
     group.add_argument('--wandb-project', default=None, type=str,
-                    help='wandb project name')
+                    help='wandb project name', required=True)
     group.add_argument('--wandb-tags', default=[], type=str, nargs='+',
-                    help='wandb tags')
+                    help='wandb tags', required=True)
 
     args = parser.parse_args()
 
@@ -183,15 +203,16 @@ def main():
         dropout=args.drop,
         )
     
-    model.to(device=device, dtype=torch.float32)
+    model.to(device=device)
 
-    summary = summary(model, input_size=(args.batch_size, 3, 224, 224))
+    model_summary = summary(model, input_size=(args.batch_size, 3, 224, 224))
     macs = torchprofile.profile_macs(model, torch.randn(1, 3, 224, 224).to(device))
 
-    print(summary)
+    print(model_summary)
     print(macs)
 
-    optimizer = AdamW(lr=args.lr, weight_decay=args.weight_decay, foreach=True)
+    unfrozen_params = filter(lambda p: p.requires_grad, model.parameters())
+    optimizer = AdamW(unfrozen_params, lr=args.lr, weight_decay=args.weight_decay)
 
     dataset_train = create_dataset(
         '',
@@ -224,6 +245,7 @@ def main():
         is_training=True,
         no_aug=True,
         num_workers=args.workers,
+        pin_memory=args.pin_mem
     )
 
     loader_eval = create_loader(
@@ -233,6 +255,7 @@ def main():
         is_training=False,
         no_aug=True,
         num_workers=args.workers,
+        pin_memory=args.pin_mem
     )
 
     train_loss_fn = nn.CrossEntropyLoss(label_smoothing=args.smoothing).to(device=device)
@@ -258,26 +281,22 @@ def main():
         tags=args.wandb_tags,
     )
 
-    lr_scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=10, num_training_steps=args.epochs)
+    lr_scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=args.warmup_epochs, num_training_steps=args.epochs) # TODO - step per epoch or per batch?
 
     for epoch in range(0, args.epochs):
         train_metrics = train_one_epoch(
-                epoch,
                 model,
                 loader_train,
                 optimizer,
                 train_loss_fn,
-                args,
-                device=device,
-                lr_scheduler=lr_scheduler,
-                output_dir=output_dir,
+                device
             )
         
         eval_metrics = validate(
                     model,
                     loader_eval,
                     validate_loss_fn,
-                    device=device,
+                    device,
                 )
         
         utils.update_summary(
@@ -285,171 +304,11 @@ def main():
             train_metrics,
             eval_metrics,
             filename=os.path.join(output_dir, 'summary.csv'),
-            log_wandb=args.log_wandb
+            log_wandb=True
         )
 
-        # TODO - UPDATE SUMMARY.CSV HERE
-
-        saver.save_checkpoint(epoch)
-        lr_scheduler.step(epoch + 1)
-
-epochs_without_gain = 0
-best_valid_loss = float("inf")
-
-max_train_acc = 0
-max_valid_acc = 0
-
-num_batches_trained = 0
-num_samples_trained = 0
-
-print("Beginning training")
-for epoch in range(start_epoch, epochs):
-    train_epoch_loss, valid_epoch_loss = 0.0, 0.0
-
-    train_epoch_preds, train_epoch_labels, train_epoch_probs = [], [], []
-    valid_epoch_preds, valid_epoch_labels, valid_epoch_probs = [], [], []
-
-    train_start_time = time.time()
-    model.train()
-    for batch_idx, (train_features, train_labels) in enumerate(dataloader_train):
-        train_batch_size = len(train_labels)
-        train_features = train_features.to(device)
-        train_labels = train_labels.to(device) # move to device
-        
-        optimizer.zero_grad()
-
-        predictions = model(train_features)
-        probs = torch.softmax(predictions, dim=1)
-        predictions_labels = torch.argmax(predictions, dim=1)
-
-        train_epoch_preds.extend(predictions_labels.cpu().numpy())
-        train_epoch_probs.extend(probs.detach().cpu().numpy())
-        train_epoch_labels.extend(train_labels.cpu().numpy())
-
-        train_batch_loss = loss(predictions, train_labels)
-        train_batch_loss.backward()
-
-        optimizer.step()
-
-        train_epoch_loss += train_batch_loss.item() * train_batch_size
-
-        num_batches_trained += 1
-        num_samples_trained += train_batch_size
-
-        train_batch_acc = accuracy_score(train_labels.cpu().numpy(), predictions_labels.cpu().numpy())
-
-        model.eval()
-        with torch.inference_mode():
-            valid_features, valid_labels = next(iter(dataloader_valid)) # sample random validation mini batch
-            valid_features = valid_features.to(device)
-            valid_labels = valid_labels.to(device) # move to device
-
-            predictions = model(valid_features)
-            predictions_labels = torch.argmax(predictions, dim=1)
-
-            valid_batch_loss = loss(predictions, valid_labels)
-            valid_batch_acc = accuracy_score(valid_labels.cpu().numpy(), predictions_labels.cpu().numpy())
-        model.train()
-
-        writer.add_scalar("Loss/train-batch", train_batch_loss.item(), num_batches_trained)
-        writer.add_scalar("Accuracy/train-batch", train_batch_acc, num_batches_trained)
-
-        writer.add_scalar("Loss/valid-batch", valid_batch_loss.item(), num_batches_trained)
-        writer.add_scalar("Accuracy/valid-batch", valid_batch_acc, num_batches_trained)
-    train_end_time = time.time()
-
-    valid_start_time = time.time()
-    model.eval()
-    with torch.inference_mode():
-        for batch_idx, (valid_features, valid_labels) in enumerate(dataloader_valid):
-            valid_batch_size = len(valid_labels)
-            valid_features = valid_features.to(device)
-            valid_labels = valid_labels.to(device) # move to device
-            
-            predictions = model(valid_features)
-            probs = torch.softmax(predictions, dim=1)
-            predictions_labels = torch.argmax(predictions, dim=1)
-
-            valid_epoch_preds.extend(predictions_labels.cpu().numpy())
-            valid_epoch_probs.extend(probs.detach().cpu().numpy())
-            valid_epoch_labels.extend(valid_labels.cpu().numpy())
-
-            valid_batch_loss = loss(predictions, valid_labels)
-            valid_epoch_loss += valid_batch_loss.item() * valid_batch_size
-    valid_end_time = time.time()
-
-    train_epoch_loss /= len(train_dataset)
-    valid_epoch_loss /= len(valid_dataset)
-
-    # TODO - check if roc auc score is computed correctly.
-
-    y_train_score = np.vstack(train_epoch_probs)
-    y_train_onehot = label_binarize(train_epoch_labels, classes=np.arange(model.num_classes))
-
-    y_valid_score = np.vstack(valid_epoch_probs)
-    y_valid_onehot = label_binarize(valid_epoch_labels, classes=np.arange(model.num_classes))
-
-    train_epoch_acc = accuracy_score(train_epoch_labels, train_epoch_preds)
-    train_epoch_prec = precision_score(train_epoch_labels, train_epoch_preds, average='macro')
-    train_epoch_rec = recall_score(train_epoch_labels, train_epoch_preds, average='macro')
-    train_epoch_f1 = f1_score(train_epoch_labels, train_epoch_preds, average='macro')
-    train_epoch_auc = roc_auc_score(y_train_onehot, y_train_score, average='macro', multi_class='ovr')
-    train_epoch_spec = specificity_score(train_epoch_labels, train_epoch_preds, average='macro')
-
-    valid_epoch_acc = accuracy_score(valid_epoch_labels, valid_epoch_preds)
-    valid_epoch_prec = precision_score(valid_epoch_labels, valid_epoch_preds, average='macro')
-    valid_epoch_rec = recall_score(valid_epoch_labels, valid_epoch_preds, average='macro')
-    valid_epoch_f1 = f1_score(valid_epoch_labels, valid_epoch_preds, average='macro')
-    valid_epoch_auc = roc_auc_score(y_valid_onehot, y_valid_score, average='macro', multi_class='ovr')
-    valid_epoch_spec = specificity_score(valid_epoch_labels, valid_epoch_preds, average='macro')
-
-    max_train_acc = max(max_train_acc, train_epoch_acc)
-    max_valid_acc = max(max_valid_acc, valid_epoch_acc)
-
-    writer.add_scalar("Loss/train-epoch", train_epoch_loss, epoch)
-    writer.add_scalar('Accuracy/train-epoch', train_epoch_acc, epoch)
-    writer.add_scalar('F1-Score/train-epoch', train_epoch_f1, epoch)
-    writer.add_scalar('Precision/train-epoch', train_epoch_prec, epoch)
-    writer.add_scalar('Recall-Sensitivity/train-epoch', train_epoch_rec, epoch)
-    writer.add_scalar('AUC/train-epoch', train_epoch_auc, epoch)
-    writer.add_scalar('Specificity/train-epoch', train_epoch_spec, epoch)
-    writer.add_scalar('Elapsed Time/train-epoch-secs', train_end_time - train_start_time, epoch)
-
-    writer.add_scalar("Loss/valid-epoch", valid_epoch_loss, epoch)
-    writer.add_scalar('Accuracy/valid-epoch', valid_epoch_acc, epoch)
-    writer.add_scalar('F1-Score/valid-epoch', valid_epoch_f1, epoch)
-    writer.add_scalar('Precision/valid-epoch', valid_epoch_prec, epoch)
-    writer.add_scalar('Recall-Sensitivity/valid-epoch', valid_epoch_rec, epoch)
-    writer.add_scalar('AUC/valid-epoch', valid_epoch_auc, epoch)
-    writer.add_scalar('Specificity/valid-epoch', valid_epoch_spec, epoch)
-    writer.add_scalar('Elapsed Time/valid-epoch-secs', valid_end_time - valid_start_time, epoch)
-
-    print(f"Saving epoch {epoch+1}...")
-    torch.save(model.state_dict(), f"checkpoints/{model_name}/epoch-{epoch+1}.pth") # checkpoint per epoch for safety
-
-    if valid_epoch_loss < best_valid_loss:
-        best_valid_loss = valid_epoch_loss
-        epochs_without_gain = 0
-
-        torch.save(model.state_dict(), f"checkpoints/{model_name}/best_model.pth") # checkpoint the best model so far
-    else:
-        epochs_without_gain += 1
-
-    if epochs_without_gain >= early_stopping_rounds:
-        print(f"Early stopping at epoch {epoch+1}")
-        break
-
-print("Train Acc:", max_train_acc)
-print("Valid Acc:", max_valid_acc)
-
-writer.flush()
-
-
-cm = confusion_matrix(valid_epoch_labels, valid_epoch_preds)
-disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=train_dataset.class_names)
-disp.plot()
-
-print(classification_report(valid_epoch_labels, valid_epoch_preds))
+        saver.save_checkpoint(epoch, metric=eval_metrics['top1'])
+        lr_scheduler.step()
 
 if __name__ == '__main__':
     main()
