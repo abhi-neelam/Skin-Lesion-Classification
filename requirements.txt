@@ -14,3 +14,4 @@ torchinfo==1.8.0
 torchprofile==0.0.4
 torchvision==0.23.0
 wandb==0.21.4
+torchtune==0.6.1
