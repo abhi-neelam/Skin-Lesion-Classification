@@ -240,8 +240,5 @@ def write_results(results_file, results):
             dw.writerow(r)
         cf.flush()
 
-def get_class_names():
-
-
 if __name__ == '__main__':
     main()
