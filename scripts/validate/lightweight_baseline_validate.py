@@ -95,6 +95,12 @@ def parse_args():
                     help='Enable confusion report summary'
                          'Requires scikit-learn. (default: True)')
 
+    parser.add_argument('--tsne', action='store_true', default=False,
+                    help='Enable tsne summary'
+                         'Requires scikit-learn. (default: False)')
+    
+    # TODO - implement tsne
+
     args = parser.parse_args()
 
     return args
