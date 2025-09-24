@@ -79,7 +79,7 @@ def parse_args():
     parser.add_argument('--data-dir', required=True, metavar='DIR',
                     help='path to dataset (root dir)')
     
-    parser.add_argument('--results-file', required=True, default='', type=str, metavar='FILENAME',
+    parser.add_argument('--results-file', required=False, default='', type=str, metavar='FILENAME',
                     help='Output csv file for validation results (summary)')
     
     parser.add_argument('--metrics-avg', type=str, default=None,
