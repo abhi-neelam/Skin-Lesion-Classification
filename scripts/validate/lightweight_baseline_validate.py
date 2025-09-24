@@ -235,6 +235,8 @@ def validate(args):
         idx_to_class = {v: k for k, v in dataset.reader.class_to_idx.items()}
         target_labels = [idx_to_class[k] for k in all_targets.tolist()]
 
+        fig, ax = plt.subplots(figsize=(15, 15), constrained_layout=True)
+
         sns.scatterplot(
             x=tsne_data[:,0], y=tsne_data[:,1],
             hue=target_labels,
