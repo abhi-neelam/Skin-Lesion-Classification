@@ -20,6 +20,7 @@ from imblearn.metrics import sensitivity_score, specificity_score
 import matplotlib.pyplot as plt
 from collections import OrderedDict
 from datetime import datetime
+from pathlib import Path
 import seaborn as sns
 import pandas as pd
 import numpy as np
@@ -216,11 +217,15 @@ def validate(args):
 
     if args.classification_report:
         print(classification_report(all_targets, all_preds, target_names=labels))
+        report = classification_report(all_targets, all_preds, target_names=labels, output_dict=True)
+        df_report = pd.DataFrame(report).transpose()
+        save_df(df_report, args, "classification_report.csv")
 
     if args.confusion_matrix:
         cm = confusion_matrix(all_targets, all_preds)
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
         disp.plot()
+        save_fig(args, "confusion_matrix.png")
         plt.show()
 
     if args.tsne:
@@ -236,6 +241,8 @@ def validate(args):
             legend="full",
             alpha=0.3
         )
+        save_fig(args, "tsne.png")
+        plt.show()
 
     results = OrderedDict(
         model=args.model,
@@ -246,6 +253,19 @@ def validate(args):
     )
 
     return results
+
+def save_df(df, args, filename):
+    p = Path(args.checkpoint)
+    model_config_name = p.parent.name
+    os.makedirs(model_config_name, exist_ok=True)
+    output_path = os.path.join(model_config_name, filename)
+    df.to_csv(output_path, index=False)
+
+def save_fig(args, filename):
+    p = Path(args.checkpoint)
+    model_config_name = p.parent.name
+    os.makedirs(model_config_name, exist_ok=True)
+    plt.savefig(os.path.join(model_config_name, filename))
 
 def main():
     args = parse_args()
