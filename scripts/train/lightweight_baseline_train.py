@@ -212,10 +212,7 @@ def main():
     model.to(device=device)
 
     model_summary = summary(model, input_size=(args.batch_size, 3, 224, 224))
-    macs = torchprofile.profile_macs(model, torch.randn(1, 3, 224, 224).to(device))
-
     print(model_summary)
-    print(macs)
 
     unfrozen_params = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = AdamW(unfrozen_params, lr=args.lr, weight_decay=args.weight_decay)
@@ -251,7 +248,8 @@ def main():
         is_training=True,
         no_aug=True,
         num_workers=args.workers,
-        pin_memory=args.pin_mem
+        pin_memory=args.pin_mem,
+        device=device
     )
 
     loader_eval = create_loader(
@@ -261,7 +259,8 @@ def main():
         is_training=False,
         no_aug=True,
         num_workers=args.workers,
-        pin_memory=args.pin_mem
+        pin_memory=args.pin_mem,
+        device=device
     )
 
     train_loss_fn = nn.CrossEntropyLoss(label_smoothing=args.smoothing).to(device=device)
