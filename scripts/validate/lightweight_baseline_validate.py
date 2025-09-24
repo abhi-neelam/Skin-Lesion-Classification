@@ -168,7 +168,7 @@ def validate(args):
 
     model.eval()
     with torch.inference_mode():
-        feature_matrix = []
+        feature_chunks = []
         for batch_idx, (input, target) in enumerate(loader):
             batch_size = input.shape[0]
 
@@ -176,7 +176,7 @@ def validate(args):
             target = target.to(device=device)
 
             features = model.forward_features(input)
-            feature_matrix = np.concatenate((feature_matrix, features.cpu().numpy()))
+            feature_chunks.append(features.cpu())
 
             output = model(input)
             if isinstance(output, (tuple, list)):
@@ -193,6 +193,8 @@ def validate(args):
                 predictions = torch.argmax(output, dim=1)
                 all_preds.append(predictions.cpu())
                 all_targets.append(target.cpu())
+
+        feature_matrix = torch.cat(feature_chunks, dim=0).numpy()
 
     top1a, top5a = top1.avg, top5.avg
 
