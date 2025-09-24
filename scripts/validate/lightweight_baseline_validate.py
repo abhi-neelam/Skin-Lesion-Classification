@@ -270,6 +270,8 @@ def save_fig(args, filename):
     plt.savefig(os.path.join(model_config_name, filename))
 
 def main():
+    sns.set_palette("bright")
+    
     args = parse_args()
 
     if torch.cuda.is_available():
