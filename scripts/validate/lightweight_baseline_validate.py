@@ -227,7 +227,6 @@ def validate(args):
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
         disp.plot()
         save_fig(args, "confusion_matrix.png")
-        plt.show()
 
     if args.tsne:
         tsne = TSNE(n_components=2)
@@ -246,7 +245,6 @@ def validate(args):
             alpha=0.3
         )
         save_fig(args, "tsne.png")
-        plt.show()
 
     results = OrderedDict(
         model=args.model,
