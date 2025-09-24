@@ -241,6 +241,7 @@ def validate(args):
             x=tsne_data[:,0], y=tsne_data[:,1],
             hue=target_labels,
             legend="full",
+            palette="bright",
             alpha=0.3
         )
         save_fig(args, "tsne.png")
