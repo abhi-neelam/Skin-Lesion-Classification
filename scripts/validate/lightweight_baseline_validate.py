@@ -219,7 +219,7 @@ def validate(args):
     if args.classification_report:
         print(classification_report(all_targets, all_preds, target_names=labels))
         report = classification_report(all_targets, all_preds, target_names=labels, output_dict=True)
-        df_report = pd.DataFrame(report).transpose()
+        df_report = pd.DataFrame(report).transpose().rename_axis("label").reset_index()
         save_df(df_report, args, "classification_report.csv")
 
     if args.confusion_matrix:
@@ -261,7 +261,7 @@ def save_df(df, args, filename):
     model_config_name = p.parent.name
     os.makedirs(model_config_name, exist_ok=True)
     output_path = os.path.join(model_config_name, filename)
-    df.to_csv(output_path, index=False)
+    df.to_csv(output_path, index=True)
 
 def save_fig(args, filename):
     p = Path(args.checkpoint)
