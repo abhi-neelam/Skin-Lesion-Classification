@@ -41,11 +41,12 @@ class LightWeight_Baseline(nn.Module):
         self.num_classes = num_classes
         self.pretrained = pretrained
         self.in_chans = in_chans
+        self.flatten = nn.Flatten()
 
     def forward_features(self, x):
         x = self.model.forward_features(x)
         x = self.model.global_pool(x)
-        x = self.model.flatten(x)
+        x = self.flatten(x)
         return x
 
     def forward(self, x):
