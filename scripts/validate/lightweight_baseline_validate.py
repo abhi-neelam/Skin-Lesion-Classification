@@ -14,11 +14,13 @@ import torchprofile
 from torchinfo import summary
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, classification_report
 from sklearn.preprocessing import label_binarize
+from sklearn.manifold import TSNE
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from imblearn.metrics import sensitivity_score, specificity_score
 import matplotlib.pyplot as plt
 from collections import OrderedDict
 from datetime import datetime
+import seaborn as sns
 import pandas as pd
 import numpy as np
 import time
@@ -38,6 +40,12 @@ class LightWeight_Baseline(nn.Module):
         self.num_classes = num_classes
         self.pretrained = pretrained
         self.in_chans = in_chans
+
+    def forward_features(self, x):
+        x = self.model.forward_features(x)
+        x = self.model.global_pool(x)
+        x = self.model.flatten(x)
+        return x
 
     def forward(self, x):
         x = self.model(x)
@@ -95,12 +103,10 @@ def parse_args():
                     help='Enable confusion report summary'
                          'Requires scikit-learn. (default: True)')
 
-    parser.add_argument('--tsne', action='store_true', default=False,
+    parser.add_argument('--tsne', action='store_true', default=True,
                     help='Enable tsne summary'
-                         'Requires scikit-learn. (default: False)')
+                         'Requires scikit-learn and seaborn. (default: False)')
     
-    # TODO - implement tsne
-
     args = parser.parse_args()
 
     return args
@@ -161,13 +167,16 @@ def validate(args):
         all_targets = []
 
     model.eval()
-
     with torch.inference_mode():
+        feature_matrix = []
         for batch_idx, (input, target) in enumerate(loader):
             batch_size = input.shape[0]
 
             input = input.to(device=device)
             target = target.to(device=device)
+
+            features = model.forward_features(input)
+            feature_matrix = np.concatenate((feature_matrix, features.cpu().numpy()))
 
             output = model(input)
             if isinstance(output, (tuple, list)):
@@ -211,6 +220,20 @@ def validate(args):
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
         disp.plot()
         plt.show()
+
+    if args.tsne:
+        tsne = TSNE(n_components=2)
+        tsne_data = tsne.fit_transform(feature_matrix)
+
+        idx_to_class = {v: k for k, v in dataset.reader.class_to_idx.items()}
+        target_labels = [idx_to_class[k] for k in all_targets.tolist()]
+
+        sns.scatterplot(
+            x=tsne_data[:,0], y=tsne_data[:,1],
+            hue=target_labels,
+            legend="full",
+            alpha=0.3
+        )
 
     results = OrderedDict(
         model=args.model,
