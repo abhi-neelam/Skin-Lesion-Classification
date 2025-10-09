@@ -9,8 +9,10 @@ from torch import nn
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset, DataLoader, random_split
+from torchvision.transforms import v2
+from torchvision.transforms import InterpolationMode
 from timm import utils
-from timm.data import create_dataset
+from timm.data import create_dataset, create_transform, resolve_data_config
 from timm.data.loader import create_loader
 from timm.models import create_model, safe_model_name
 from torchtune.training import get_cosine_schedule_with_warmup
@@ -184,6 +186,8 @@ def parse_args():
                     help='wandb project name', required=True)
     group.add_argument('--wandb-tags', default=[], type=str, nargs='+',
                     help='wandb tags', required=True)
+    group.add_argument('--disable-wandb', action='store_true', default=False,
+                   help='Option to disable wandb logs to online')
 
     args = parser.parse_args()
 
@@ -226,7 +230,7 @@ def main():
         batch_size=args.batch_size,
         seed=args.seed,
         input_key=None,
-        target_key=None, # TODO - remove this?
+        target_key=None,
     )
 
     dataset_eval = create_dataset(
@@ -238,7 +242,7 @@ def main():
         batch_size=args.batch_size,
         seed=args.seed,
         input_key=None,
-        target_key=None, # TODO - remove this?
+        target_key=None,
     )
 
     loader_train = create_loader(
@@ -249,9 +253,31 @@ def main():
         no_aug=True,
         num_workers=args.workers,
         pin_memory=args.pin_mem,
-        device=device
+        device=device,
+        use_prefetcher=False,
     )
+    args.rank = args.local_rank = 0
+    data_cfg = resolve_data_config(vars(args), model=model, verbose=utils.is_primary(args))
+    
+    base_train_transform = create_transform(input_size=(3,224,224), 
+                                            is_training=True, 
+                                            no_aug=True,
+                                            mean=data_cfg['mean'], 
+                                            std=data_cfg['std'])
 
+    dataset_train.transform = v2.Compose([
+        v2.RandomAffine(
+            degrees=(45, 180),
+            translate=(0.125, 0.125),
+            scale=(0.90, 1.10),
+            interpolation=InterpolationMode.BILINEAR
+        ),
+        v2.RandomHorizontalFlip(p=0.5),
+        v2.RandomVerticalFlip(p=0.5),
+        v2.ColorJitter(brightness=0.20, contrast=0.15, saturation=0.10),
+        base_train_transform
+    ])
+    
     loader_eval = create_loader(
         dataset_eval,
         input_size=(3, 224, 224),
@@ -260,7 +286,8 @@ def main():
         no_aug=True,
         num_workers=args.workers,
         pin_memory=args.pin_mem,
-        device=device
+        device=device,
+        use_prefetcher=False,
     )
 
     train_loss_fn = nn.CrossEntropyLoss(label_smoothing=args.smoothing).to(device=device)
@@ -279,12 +306,14 @@ def main():
     with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
         f.write(args_text)
 
-    wandb.init(
-        project=args.wandb_project,
-        name=exp_name,
-        config=args,
-        tags=args.wandb_tags,
-    )
+    if not args.disable_wandb:
+        wandb.init(
+            mode="online" if args.disable_wandb else "disabled",
+            project=args.wandb_project,
+            name=exp_name,
+            config=args,
+            tags=args.wandb_tags,
+        )
 
     lr_scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=args.warmup_epochs, num_training_steps=args.epochs) # TODO - step per epoch or per batch?
 
@@ -309,7 +338,7 @@ def main():
             train_metrics,
             eval_metrics,
             filename=os.path.join(output_dir, 'summary.csv'),
-            log_wandb=True
+            log_wandb=not args.disable_wandb
         )
 
         saver.save_checkpoint(epoch, metric=eval_metrics['top1'])
