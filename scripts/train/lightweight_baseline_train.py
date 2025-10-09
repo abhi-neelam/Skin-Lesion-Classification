@@ -308,7 +308,6 @@ def main():
 
     if not args.disable_wandb:
         wandb.init(
-            mode="online" if args.disable_wandb else "disabled",
             project=args.wandb_project,
             name=exp_name,
             config=args,
