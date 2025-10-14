@@ -43,11 +43,8 @@ class LightWeight_Baseline(nn.Module):
         self.in_chans = in_chans
         self.flatten = nn.Flatten()
 
-    def forward_features(self, x):
-        x = self.model.forward_features(x)
-        x = self.model.global_pool(x)
-        x = self.flatten(x)
-        return x
+    def forward_head(self, x):
+        return self.model.forward_head(x, pre_logits=True)
 
     def forward(self, x):
         x = self.model(x)
@@ -177,7 +174,7 @@ def validate(args):
             input = input.to(device=device)
             target = target.to(device=device)
 
-            features = model.forward_features(input)
+            features = model.forward_head(input)
             feature_chunks.append(features.cpu())
 
             output = model(input)
