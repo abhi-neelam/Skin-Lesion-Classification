@@ -23,9 +23,6 @@ var/
 # DotEnv configuration
 .env
 
-# VS Code
-.vscode/
-
 # Jupyter NB Checkpoints
 .ipynb_checkpoints/
 # *.Rmd
@@ -51,7 +48,8 @@ var/
 **/checkpoints/
 
 # editor, os cache directory
-.vscode/
+.vscode/*
+!.vscode/launch.json
 .idea/
 __MACOSX/
 

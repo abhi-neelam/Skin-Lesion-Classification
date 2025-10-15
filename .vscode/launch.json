@@ -1,0 +1,78 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Lightweight Mbv3 Debug Train (lightweight_baseline_train.py)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "lightweight_baseline_train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/scripts/train/",
+            "args": [
+                "--data-dir",
+                "../../data/ISIC_2019_timm_augmented",
+                "--model",
+                "mobilenetv3_large_100",
+                "--epochs",
+                "2", // 2 epochs
+                "-b",
+                "32",
+                "--drop",
+                "0.2",
+                "--lr",
+                "0.0001",
+                "--device",
+                "cuda:0",
+                "--pretrained",
+                "--num-classes",
+                "8",
+                "--seed",
+                "42",
+                "--workers",
+                "1",
+                "--pin-mem",
+                "--checkpoint-hist",
+                "0",
+                "--output",
+                "./logs"
+            ],
+            "stopOnEntry": true,
+            "subProcess": true
+        },
+        {
+            "name": "Lightweight Fusion Debug Train (model_fusion.py)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "model_fusion.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/scripts/train/",
+            "args": [
+                "--data-dir",
+                "../../data/ISIC_2019_timm_augmented",
+                "--models",
+                "mobilenetv3_large_100",
+                "efficientvit_m5",
+                "-b",
+                "32",
+                "--device",
+                "cuda:0",
+                "--num-classes",
+                "8",
+                "--seed",
+                "42",
+                "--workers",
+                "1",
+                "--pin-mem",
+                "--checkpoints",
+                "../train/logs/mbv3-large-base-aug-rerun.01/model_best.pth.tar",
+                "../train/logs/efficientViT-m5-base-aug-rerun.01/model_best.pth.tar",
+                "--output",
+                "./logs",
+                "--experiment",
+                "debug"
+            ],
+            "stopOnEntry": false,
+            "subProcess": true
+        }
+    ]
+}

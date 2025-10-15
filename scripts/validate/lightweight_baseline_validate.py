@@ -28,18 +28,16 @@ import time
 import os
 
 class LightWeight_Baseline(nn.Module):
-    def __init__(self, model, num_classes, pretrained=True, in_chans=3):
+    def __init__(self, model, num_classes, in_chans=3):
         super().__init__()
 
         self.model = create_model(
             model,
-            pretrained=pretrained,
             in_chans=in_chans,
             num_classes=num_classes,
         )
 
         self.num_classes = num_classes
-        self.pretrained = pretrained
         self.in_chans = in_chans
         self.flatten = nn.Flatten()
 
@@ -62,9 +60,6 @@ def parse_args():
     parser.add_argument('--checkpoint', required=True, default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
 
-    parser.add_argument('--pretrained', action='store_true', default=False,
-                   help='Start with pretrained version of specified network (if avail)')
-    
     parser.add_argument('--num-classes', type=int, default=None, metavar='N',
                    help='number of label classes (Model default if None)', required=True)
     
@@ -120,7 +115,6 @@ def validate(args):
     model = LightWeight_Baseline(
         args.model,
         num_classes=args.num_classes,
-        pretrained=args.pretrained,
         in_chans=3,
     )
 

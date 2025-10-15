@@ -46,18 +46,16 @@ def experiment_name(args):
     return "-".join([datetime.now().strftime("%Y%m%d-%H%M%S"), name, "224"])
         
 class LightWeight_Baseline(nn.Module):
-    def __init__(self, model, num_classes, pretrained=True, in_chans=3):
+    def __init__(self, model, num_classes, in_chans=3):
         super().__init__()
 
         self.model = create_model(
             model,
-            pretrained=pretrained,
             in_chans=in_chans,
             num_classes=num_classes,
         )
 
         self.num_classes = num_classes
-        self.pretrained = pretrained
         self.in_chans = in_chans
         self.flatten = nn.Flatten()
 
@@ -76,20 +74,14 @@ def parse_args():
                    help='path to output folder (default: none, current dir)', required=True)
 
     parser.add_argument('--experiment', default='', type=str, metavar='NAME',
-                   help='name of train experiment, name of sub-folder for output', required=True)
+                   help='name of train experiment, name of sub-folder for output', required=False)
     
     parser.add_argument('--models', required=True, nargs='+', default='', type=str, metavar='MODEL',
                    help='Names of models to fuse (e.g: "mobilenetv3_large_100 resnet50")')
-    
-    parser.add_argument('--split', metavar='NAME', default='train',
-                    help='dataset split (default: train)')
 
     parser.add_argument('--checkpoints', required=True, nargs='+', default='', type=str, metavar='PATH',
                     help='Paths to latest checkpoints (default: none)')
 
-    parser.add_argument('--pretrained', action='store_true', default=False,
-                   help='Start with pretrained version of specified network (if avail)')
-    
     parser.add_argument('--num-classes', type=int, default=None, metavar='N',
                    help='number of label classes (Model default if None)', required=True)
     
@@ -127,10 +119,10 @@ def parse_args():
                    help='max tree depth (default: -1)')
     
     parser.add_argument('--wandb-project', default=None, type=str,
-                    help='wandb project name', required=True)
+                    help='wandb project name', required=False)
     
-    parser.add_argument('--wandb-tags', default=[], type=str, nargs='+',
-                    help='wandb tags', required=True)
+    parser.add_argument('--wandb-tags', default=[], type=str, nargs='*',
+                    help='wandb tags', required=False)
     
     args = parser.parse_args()
     
@@ -148,7 +140,7 @@ def get_pre_logits_and_labels(models, loader, device):
         for batch_idx, (input, target) in enumerate(loader):
             if batch_idx > 3: # TODO - remove after
                 break
-            batch_size = input.shape[0]
+            # batch_size = input.shape[0]
 
             input = input.to(device=device)
             target = target.to(device=device)
@@ -159,14 +151,17 @@ def get_pre_logits_and_labels(models, loader, device):
                 features = nn.functional.normalize(features, dim=1) # normalize each model feature vector
                 fused_features.append(features)
 
-            fused_features = torch.cat(fused_features, dim=1) # TODO - check vram usage. consider moving to cpu
-            features_np.append(fused_features)
-            targets_np.append(target)
-    features_np = torch.cat(features_np, dim=0).cpu().numpy()
-    targets_np = torch.cat(targets_np, dim=0).cpu().numpy()
+            fused_features = torch.cat(fused_features, dim=1)
+            features_np.append(fused_features.cpu())
+            targets_np.append(target.cpu())
+    features_np = torch.cat(features_np, dim=0).numpy()
+    targets_np = torch.cat(targets_np, dim=0).numpy()
     
     X = features_np
     y = targets_np
+    
+    cols = [f"Column_{i}" for i in range(X.shape[1])]
+    X = pd.DataFrame(X, columns=cols)
     
     return X, y
 
@@ -179,8 +174,8 @@ def train(args):
 
     models = []
     for i, (model_str, checkpoint) in enumerate(zip(args.models, args.checkpoints)):
-        model = LightWeight_Baseline(model_str, num_classes=args.num_classes, pretrained=args.pretrained, in_chans=3)
-        load_checkpoint(model, checkpoint, False)
+        model = LightWeight_Baseline(model_str, num_classes=args.num_classes, in_chans=3)
+        load_checkpoint(model, checkpoint, use_ema=False, strict=False)
         if args.reparam:
             model = reparameterize_model(model)
     
@@ -192,6 +187,7 @@ def train(args):
 
     dataset_train = create_dataset(
         '',
+        is_training=True,
         root=args.data_dir,
         split='train',
         class_map='',
@@ -214,6 +210,7 @@ def train(args):
 
     loader_train = create_loader(
         dataset_train,
+        is_training=True,
         input_size=(3, 224, 224),
         batch_size=args.batch_size,
         no_aug=True,
@@ -237,9 +234,7 @@ def train(args):
 
     eval_result = {}
     
-    clf = LGBMClassifier(n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="gpu", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=50)
-    # TODO - check if device is correct. use gpu?
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=args.seed)
+    clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="gpu", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=100)
     clf.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], eval_metric="multi_logloss",
         callbacks=[
             lgb.log_evaluation(),
@@ -276,25 +271,25 @@ def main():
 
     exp_name = experiment_name(args)
     
-    wandb.init(
-        project=args.wandb_project,
-        name=exp_name,
-        config=args,
-        tags=args.wandb_tags,
-    )
+    if args.wandb_project:
+        wandb.init(
+            project=args.wandb_project,
+            name=exp_name,
+            config=args,
+            tags=args.wandb_tags,
+        )
 
     output_dir = utils.get_outdir(args.output if args.output else './output/train', exp_name)
     random_seed(args.seed)
     clf = train(args)
     
-    outdir = Path(args.output) / exp_name
-    outdir.mkdir(parents=True, exist_ok=True) # create experiment dir
-    joblib.dump(clf, str(outdir / "lgbm.pkl"))
-
     with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
         f.write(args_text)
+        
+    joblib.dump(clf, os.path.join(output_dir, "lgbm.pkl"))
 
-    wandb.finish()
+    if args.wandb_project:
+        wandb.finish()
 
 if __name__ == '__main__':
     main()

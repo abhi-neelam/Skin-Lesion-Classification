@@ -181,9 +181,9 @@ def parse_args():
                    help='name of train experiment, name of sub-folder for output', required=True)
     
     group.add_argument('--wandb-project', default=None, type=str,
-                    help='wandb project name', required=True)
-    group.add_argument('--wandb-tags', default=[], type=str, nargs='+',
-                    help='wandb tags', required=True)
+                    help='wandb project name', required=False)
+    group.add_argument('--wandb-tags', default=[], type=str, nargs='*',
+                    help='wandb tags', required=False)
 
     args = parser.parse_args()
 
@@ -275,16 +275,17 @@ def main():
         checkpoint_dir=output_dir,
         max_history=args.checkpoint_hist
     )
-    
+
     with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
         f.write(args_text)
 
-    wandb.init(
-        project=args.wandb_project,
-        name=exp_name,
-        config=args,
-        tags=args.wandb_tags,
-    )
+    if args.wandb_project:
+        wandb.init(
+            project=args.wandb_project,
+            name=exp_name,
+            config=args,
+            tags=args.wandb_tags,
+        )
 
     lr_scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=args.warmup_epochs, num_training_steps=args.epochs) # TODO - step per epoch or per batch?
 
@@ -309,7 +310,7 @@ def main():
             train_metrics,
             eval_metrics,
             filename=os.path.join(output_dir, 'summary.csv'),
-            log_wandb=True
+            log_wandb=bool(args.wandb_project)
         )
 
         saver.save_checkpoint(epoch, metric=eval_metrics['top1'])
