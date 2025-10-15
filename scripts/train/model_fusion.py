@@ -112,11 +112,14 @@ def parse_args():
     parser.add_argument('--lr', type=float, default=0.05, metavar='LR',
                    help='learning rate, overrides lr-base if set (default: 0.05)')
     
-    parser.add_argument('--trees', type=int, default=1000, metavar='T',
-                   help='number of boosted trees to fit (default: 300)')
+    parser.add_argument('--trees', type=int, default=500, metavar='T',
+                   help='number of boosted trees to fit (default: 500)')
     
     parser.add_argument('--max-depth', type=int, default=10, metavar='D',
                    help='max tree depth (default: 10)')
+    
+    parser.add_argument('--early-stopping-rounds', type=int, default=50, metavar='E',
+                   help='max tree depth (default: 50)')
     
     parser.add_argument('--wandb-project', default=None, type=str,
                     help='wandb project name', required=False)
@@ -234,7 +237,7 @@ def train(args):
 
     eval_result = {}
     
-    clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="cpu", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay)
+    clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="cpu", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=args.early_stopping_rounds)
     clf.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], eval_metric="multi_logloss",
         callbacks=[
             lgb.log_evaluation(),
