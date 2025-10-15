@@ -138,8 +138,6 @@ def get_pre_logits_and_labels(models, loader, device):
     targets_np = []
     with torch.inference_mode():
         for batch_idx, (input, target) in enumerate(loader):
-            if batch_idx > 3: # TODO - remove after
-                break
             # batch_size = input.shape[0]
 
             input = input.to(device=device)
