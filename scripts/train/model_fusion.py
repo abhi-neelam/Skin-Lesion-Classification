@@ -158,6 +158,8 @@ def get_pre_logits_and_labels(models, loader, device):
     X = features_np
     y = targets_np
     
+    assert np.isfinite(X).all()
+    
     cols = [f"Column_{i}" for i in range(X.shape[1])]
     X = pd.DataFrame(X, columns=cols)
     
@@ -230,8 +232,6 @@ def train(args):
     X_train, y_train = get_pre_logits_and_labels(models, loader_train, device)
     X_valid, y_valid = get_pre_logits_and_labels(models, loader_eval, device)
 
-    assert np.isfinite(X_train).all() and np.isfinite(X_valid).all()
-    
     eval_result = {}
     
     clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="cuda", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay)
