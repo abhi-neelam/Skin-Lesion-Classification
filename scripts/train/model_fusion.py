@@ -100,6 +100,9 @@ def parse_args():
     parser.add_argument('--reparam', default=False, action='store_true',
                     help='Reparameterize model')
 
+    parser.add_argument('--normalize', action='store_true', default=False,
+                   help='Normalize features before fusion')
+
     parser.add_argument('--data-dir', required=True, metavar='DIR',
                     help='path to dataset (root dir)')
     
@@ -133,7 +136,7 @@ def parse_args():
 
     return args, args_text
 
-def get_pre_logits_and_labels(models, loader, device):
+def get_pre_logits_and_labels(args, models, loader, device):
     for model in models:
         model.eval()
 
@@ -149,7 +152,10 @@ def get_pre_logits_and_labels(models, loader, device):
             fused_features = []
             for model in models:
                 features = model.forward_head(input) # (batch_size, feature_count)
-                features = nn.functional.normalize(features, dim=1) # normalize each model feature vector
+                
+                if args.normalize:
+                    features = nn.functional.normalize(features, dim=1) # normalize each model feature vector
+
                 fused_features.append(features)
 
             fused_features = torch.cat(fused_features, dim=1)
@@ -232,8 +238,8 @@ def train(args):
         device=device
     )
 
-    X_train, y_train = get_pre_logits_and_labels(models, loader_train, device)
-    X_valid, y_valid = get_pre_logits_and_labels(models, loader_eval, device)
+    X_train, y_train = get_pre_logits_and_labels(args, models, loader_train, device)
+    X_valid, y_valid = get_pre_logits_and_labels(args, models, loader_eval, device)
 
     eval_result = {}
     
