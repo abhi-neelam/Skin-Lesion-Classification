@@ -232,7 +232,7 @@ def train(args):
 
     eval_result = {}
     
-    clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="gpu", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay)
+    clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="cuda", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay)
     clf.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], eval_metric="multi_logloss",
         callbacks=[
             lgb.log_evaluation(),
