@@ -118,8 +118,8 @@ def parse_args():
     parser.add_argument('--max-depth', type=int, default=10, metavar='D',
                    help='max tree depth (default: 10)')
     
-    parser.add_argument('--early-stopping-rounds', type=int, default=50, metavar='E',
-                   help='max tree depth (default: 50)')
+    parser.add_argument('--early-stopping-rounds', type=int, default=5, metavar='E',
+                   help='early stopping rounds (default: 5)')
     
     parser.add_argument('--wandb-project', default=None, type=str,
                     help='wandb project name', required=False)
