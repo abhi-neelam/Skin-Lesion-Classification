@@ -106,17 +106,17 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=42, metavar='S',
                    help='random seed (default: 42)')
     
-    parser.add_argument('--weight-decay', type=float, default=2e-5,
-                    help='weight decay (default: 2e-5)')
+    parser.add_argument('--weight-decay', type=float, default=1.0,
+                    help='weight decay (default: 1.0)')
     
-    parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
-                   help='learning rate, overrides lr-base if set (default: 0.1)')
+    parser.add_argument('--lr', type=float, default=0.05, metavar='LR',
+                   help='learning rate, overrides lr-base if set (default: 0.05)')
     
-    parser.add_argument('--trees', type=int, default=300, metavar='T',
+    parser.add_argument('--trees', type=int, default=1000, metavar='T',
                    help='number of boosted trees to fit (default: 300)')
     
-    parser.add_argument('--max-depth', type=int, default=-1, metavar='D',
-                   help='max tree depth (default: -1)')
+    parser.add_argument('--max-depth', type=int, default=10, metavar='D',
+                   help='max tree depth (default: 10)')
     
     parser.add_argument('--wandb-project', default=None, type=str,
                     help='wandb project name', required=False)
