@@ -230,6 +230,8 @@ def train(args):
     X_train, y_train = get_pre_logits_and_labels(models, loader_train, device)
     X_valid, y_valid = get_pre_logits_and_labels(models, loader_eval, device)
 
+    assert np.isfinite(X_train).all() and np.isfinite(X_valid).all()
+    
     eval_result = {}
     
     clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="cuda", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay)
