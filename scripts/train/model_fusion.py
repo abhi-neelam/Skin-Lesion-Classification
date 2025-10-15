@@ -100,7 +100,7 @@ def parse_args():
     parser.add_argument('--reparam', default=False, action='store_true',
                     help='Reparameterize model')
 
-    parser.add_argument('--normalize', action='store_true', default=False,
+    parser.add_argument('--normalize', action='store_true', default=True,
                    help='Normalize features before fusion')
 
     parser.add_argument('--data-dir', required=True, metavar='DIR',
