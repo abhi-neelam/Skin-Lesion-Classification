@@ -42,6 +42,7 @@ class LightWeight_Baseline(nn.Module):
         self.flatten = nn.Flatten()
 
     def forward_head(self, x):
+        x = self.model.forward_features(x)
         return self.model.forward_head(x, pre_logits=True)
 
     def forward(self, x):
