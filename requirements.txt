@@ -18,3 +18,4 @@ torchtune==0.6.1
 torchao==0.13.0
 seaborn==0.13.2
 lightgbm==4.6.0
+xgboost-cpu==3.1.0

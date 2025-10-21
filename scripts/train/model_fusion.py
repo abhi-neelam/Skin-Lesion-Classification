@@ -20,7 +20,11 @@ from sklearn.manifold import TSNE
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from imblearn.metrics import sensitivity_score, specificity_score
+import xgboost as xgb
 import lightgbm as lgb
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
 from lightgbm import LGBMClassifier
 import matplotlib.pyplot as plt
 from collections import OrderedDict
@@ -112,6 +116,9 @@ def parse_args():
     parser.add_argument('--weight-decay', type=float, default=1.0,
                     help='weight decay (default: 1.0)')
     
+    parser.add_argument('--C', type=float, default=1.0,
+                    help='svc regularization (default: 1.0)')
+    
     parser.add_argument('--lr', type=float, default=0.05, metavar='LR',
                    help='learning rate, overrides lr-base if set (default: 0.05)')
     
@@ -129,6 +136,9 @@ def parse_args():
     
     parser.add_argument('--wandb-tags', default=[], type=str, nargs='*',
                     help='wandb tags', required=False)
+    
+    parser.add_argument('--classifier', default='lightgbm', type=str, metavar='CLF',
+                   help='name of classifier to use for fusion (default: lightgbm, options - lightgbm, xgboost, hgbc, svc, logistic)', required=True)
     
     args = parser.parse_args()
     
@@ -243,13 +253,28 @@ def train(args):
 
     eval_result = {}
     
-    clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="cpu", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=args.early_stopping_rounds)
-    clf.fit(X_train, y_train, eval_set=[(X_valid, y_valid)], eval_metric="multi_logloss",
-        callbacks=[
-            lgb.log_evaluation(),
-            lgb.record_evaluation(eval_result),
-        ]
-    )
+    clf = None
+    match args.classifier:
+        case "lightgbm":
+            clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="cpu", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=args.early_stopping_rounds)
+            clf.fit(X_train, y_train, eval_set=[(X_train, y_train), (X_valid, y_valid)], eval_metric="multi_logloss",
+                callbacks=[
+                    lgb.log_evaluation(),
+                    lgb.record_evaluation(eval_result),
+                ]
+            )
+        case "xgboost":
+            clf = xgb.XGBClassifier(n_estimators=args.trees, max_depth=args.max_depth, eval_metric="mlogloss", objective='multi:softprob', device="cpu", verbosity=0, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=args.early_stopping_rounds)
+            clf.fit(X_train, y_train, eval_set=[(X_train, y_train), (X_valid, y_valid)], verbose=True)
+        case "hgbc":
+            clf = HistGradientBoostingClassifier(random_state=args.seed, learning_rate=args.lr, max_iter=args.trees, max_depth=args.max_depth, l2_regularization=args.weight_decay, early_stopping=True, n_iter_no_change=args.early_stopping_rounds, verbose=2)
+            clf.fit(X_train, y_train, X_val=X_valid, y_val=y_valid)
+        case "svc":
+            clf = SVC(probability=False, verbose=True, random_state=args.seed, C=args.C, decision_function_shape='ovr')
+            clf.fit(X_train, y_train)
+        case "logistic":
+            clf = LogisticRegression(random_state=args.seed, C=args.C, solver='lbfgs', max_iter=args.trees, verbose=1, n_jobs=args.workers)
+            clf.fit(X_train, y_train)
     
     predictions = clf.predict(X_valid)
     print("Valid accuracy:", accuracy_score(y_valid, predictions))
