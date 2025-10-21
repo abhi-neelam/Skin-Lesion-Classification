@@ -46,7 +46,6 @@ var/
 **/saved/
 **/datasets/
 **/checkpoints/
-**/screenshots/
 
 # editor, os cache directory
 .vscode/*
