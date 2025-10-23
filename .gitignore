@@ -59,9 +59,13 @@ __MACOSX/
 .venv
 env/
 venv/
+dfenv/
 ENV/
 env.bak/
 venv.bak/
 
 wandb/
 logs/
+
+# Pyenv
+.python-version
