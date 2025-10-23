@@ -224,9 +224,7 @@ def main():
         is_training=True,
         class_map='',
         batch_size=args.batch_size,
-        seed=args.seed,
-        input_key=None,
-        target_key=None, # TODO - remove this?
+        seed=args.seed
     )
 
     dataset_eval = create_dataset(
@@ -236,9 +234,7 @@ def main():
         is_training=False,
         class_map='',
         batch_size=args.batch_size,
-        seed=args.seed,
-        input_key=None,
-        target_key=None, # TODO - remove this?
+        seed=args.seed
     )
 
     loader_train = create_loader(
