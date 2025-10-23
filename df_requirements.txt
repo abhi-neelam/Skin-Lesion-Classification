@@ -5,7 +5,7 @@ matplotlib
 numpy==1.19.5
 pandas
 scikit-learn==1.6.1
-scipy==1.13.1
+scipy
 sympy==1.13.3
 timm==1.0.19
 torch==2.8.0
