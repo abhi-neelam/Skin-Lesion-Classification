@@ -286,6 +286,8 @@ def main():
         model.to(device=device)
         models.append(model)
 
+    args.model = '-'.join(args.models)
+
     model = Fused_DNN(models, args.num_classes, args.drop, normalize=args.normalize)
     model.to(device=device)
     
