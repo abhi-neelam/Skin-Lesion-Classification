@@ -72,11 +72,16 @@ def train_one_epoch(model, loader, optimizer, loss_fn, device):
     losses_m = utils.AverageMeter()
     top1_m = utils.AverageMeter()
     top5_m = utils.AverageMeter()
+    data_time_m = utils.AverageMeter()
+    update_time_m = utils.AverageMeter()
 
     model.train()
 
+    data_start_time = update_start_time = time.time()
     optimizer.zero_grad()
     for batch_idx, (input, target) in enumerate(loader):
+        data_time_m.update(time.time() - data_start_time)
+        
         batch_size = input.shape[0]
 
         input = input.to(device=device)
@@ -91,25 +96,43 @@ def train_one_epoch(model, loader, optimizer, loss_fn, device):
 
         loss.backward()
         optimizer.step()
-        
+
         losses_m.update(loss.item(), batch_size)
         top1_m.update(acc1.item(), batch_size)
         top5_m.update(acc5.item(), batch_size)
 
         optimizer.zero_grad()
 
-    metrics = OrderedDict([('loss', losses_m.avg), ('top1', top1_m.avg), ('top5', top5_m.avg)])
+        update_time_m.update(time.time() - update_start_time)
+
+        data_start_time = time.time()
+        update_start_time = time.time()
+
+    throughput = top1_m.count / update_time_m.sum
+    
+    metrics = OrderedDict([
+        ('loss', losses_m.avg), 
+        ('top1', top1_m.avg), 
+        ('top5', top5_m.avg),
+        ('data_time', data_time_m.avg),
+        ('update_time', update_time_m.avg),
+        ('throughput', throughput)
+    ])
+    
     return metrics
 
 def validate(model, loader, loss_fn, device):
     losses_m = utils.AverageMeter()
     top1_m = utils.AverageMeter()
     top5_m = utils.AverageMeter()
+    data_time_m = utils.AverageMeter()
+    update_time_m = utils.AverageMeter()
 
     model.eval()
-
+    data_start_time = update_start_time = time.time()
     with torch.inference_mode():
         for batch_idx, (input, target) in enumerate(loader):
+            data_time_m.update(time.time() - data_start_time)
             batch_size = input.shape[0]
 
             input = input.to(device=device)
@@ -125,8 +148,23 @@ def validate(model, loader, loss_fn, device):
             losses_m.update(loss.item(), batch_size)
             top1_m.update(acc1.item(), batch_size)
             top5_m.update(acc5.item(), batch_size)
+            
+            update_time_m.update(time.time() - update_start_time)
 
-    metrics = OrderedDict([('loss', losses_m.avg), ('top1', top1_m.avg), ('top5', top5_m.avg)])
+            data_start_time = time.time()
+            update_start_time = time.time()
+
+    throughput = top1_m.count / update_time_m.sum
+    
+    metrics = OrderedDict([
+        ('loss', losses_m.avg), 
+        ('top1', top1_m.avg), 
+        ('top5', top5_m.avg),
+        ('data_time', data_time_m.avg),
+        ('update_time', update_time_m.avg),
+        ('throughput', throughput)
+    ])
+    
     return metrics
 
 def parse_args():
