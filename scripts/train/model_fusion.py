@@ -252,11 +252,13 @@ def train(args):
     X_valid, y_valid = get_pre_logits_and_labels(args, models, loader_eval, device)
 
     eval_result = {}
-    
+    start_time = 0
+
     clf = None
     match args.classifier:
         case "lightgbm":
             clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="cpu", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=args.early_stopping_rounds)
+            start_time = time.time()
             clf.fit(X_train, y_train, eval_set=[(X_train, y_train), (X_valid, y_valid)], eval_metric="multi_logloss",
                 callbacks=[
                     lgb.log_evaluation(),
@@ -265,19 +267,32 @@ def train(args):
             )
         case "xgboost":
             clf = xgb.XGBClassifier(n_estimators=args.trees, max_depth=args.max_depth, eval_metric="mlogloss", objective='multi:softprob', device="cpu", verbosity=0, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=args.early_stopping_rounds)
+            start_time = time.time()
             clf.fit(X_train, y_train, eval_set=[(X_train, y_train), (X_valid, y_valid)], verbose=True)
         case "hgbc":
             clf = HistGradientBoostingClassifier(random_state=args.seed, learning_rate=args.lr, max_iter=args.trees, max_depth=args.max_depth, l2_regularization=args.weight_decay, early_stopping=True, n_iter_no_change=args.early_stopping_rounds, verbose=2)
+            start_time = time.time()
             clf.fit(X_train, y_train, X_val=X_valid, y_val=y_valid)
         case "svc":
             clf = SVC(probability=False, verbose=True, random_state=args.seed, C=args.C, decision_function_shape='ovr')
+            start_time = time.time()
             clf.fit(X_train, y_train)
         case "logistic":
             clf = LogisticRegression(random_state=args.seed, C=args.C, solver='lbfgs', max_iter=args.trees, verbose=1, n_jobs=args.workers)
+            start_time = time.time()
             clf.fit(X_train, y_train)
+    train_time = time.time() - start_time
     
-    predictions = clf.predict(X_valid)
-    print("Valid accuracy:", accuracy_score(y_valid, predictions))
+    train_predictions = clf.predict(X_train)
+    
+    start_time = time.time()
+    valid_predictions = clf.predict(X_valid)
+    inference_time = time.time() - start_time
+    
+    print("Total Training Time:", train_time)
+    print("Total Validation Inference Time:", inference_time)
+    print("Train accuracy:", accuracy_score(y_train, train_predictions))
+    print("Valid accuracy:", accuracy_score(y_valid, valid_predictions))
 
     return clf
 
@@ -316,10 +331,10 @@ def main():
     output_dir = utils.get_outdir(args.output if args.output else './output/train', exp_name)
     random_seed(args.seed)
     clf = train(args)
-    
+
     with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
         f.write(args_text)
-        
+
     joblib.dump(clf, os.path.join(output_dir, "lgbm.pkl"))
 
     if args.wandb_project:

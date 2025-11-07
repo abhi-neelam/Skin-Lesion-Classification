@@ -82,9 +82,6 @@ def parse_args():
     parser.add_argument('--data-dir', required=True, metavar='DIR',
                     help='path to dataset (root dir)')
     
-    parser.add_argument('--results-file', required=False, default='', type=str, metavar='FILENAME',
-                    help='Output csv file for validation results (summary)')
-    
     parser.add_argument('--metrics-avg', type=str, default=None,
                     choices=['micro', 'macro', 'weighted'],
                     help='Enable precision, recall, F1-score calculation and specify the averaging method. '
@@ -163,12 +160,14 @@ def validate(args):
         all_targets = []
 
     model.eval()
-    data_start_time = update_start_time = time.time()
+    data_start_time = time.time()
     with torch.inference_mode():
         feature_chunks = []
         for batch_idx, (input, target) in enumerate(loader):
             data_time.update(time.time() - data_start_time)
             batch_size = input.shape[0]
+
+            inference_start_time = time.time()
 
             input = input.to(device=device)
             target = target.to(device=device)
@@ -187,10 +186,9 @@ def validate(args):
             top1.update(acc1.item(), batch_size)
             top5.update(acc5.item(), batch_size)
             
-            inference_time.update(time.time() - update_start_time)
+            inference_time.update(time.time() - inference_start_time)
 
             data_start_time = time.time()
-            update_start_time = time.time()
             
             if args.metrics_avg:
                 predictions = torch.argmax(output, dim=1)
@@ -200,8 +198,8 @@ def validate(args):
         feature_matrix = torch.cat(feature_chunks, dim=0).numpy()
 
     top1a, top5a = top1.avg, top5.avg
-    inference_time, data_time = inference_time.avg, data_time.avg
-    throughput = top1.count / inference_time.sum
+    inference_time, data_time, total_inference_time, total_data_time = inference_time.avg, data_time.avg, inference_time.sum, data_time.sum
+    throughput = top1.count / total_inference_time
 
     all_preds = torch.cat(all_preds).numpy()
     all_targets = torch.cat(all_targets).numpy()
@@ -254,25 +252,28 @@ def validate(args):
         top1=round(top1a, 4), top1_err=round(100 - top1a, 4),
         top5=round(top5a, 4), top5_err=round(100 - top5a, 4),
         inference_time=round(inference_time, 4), data_time=round(data_time, 4),
+        total_inference_time=round(total_inference_time, 4), total_data_time=round(total_data_time, 4),
         throughput=round(throughput),
         **metric_results,
         param_count=round(param_count / 1e6, 2),
     )
+    
+    print(results)
 
     return results
 
 def save_df(df, args, filename):
     p = Path(args.checkpoint)
     model_config_name = p.parent.name
-    os.makedirs(model_config_name, exist_ok=True)
-    output_path = os.path.join(model_config_name, filename)
+    os.makedirs(os.path.join(args.split, model_config_name), exist_ok=True)
+    output_path = os.path.join(args.split, model_config_name, filename)
     df.to_csv(output_path, index=True)
 
 def save_fig(args, filename):
     p = Path(args.checkpoint)
     model_config_name = p.parent.name
-    os.makedirs(model_config_name, exist_ok=True)
-    plt.savefig(os.path.join(model_config_name, filename))
+    os.makedirs(os.path.join(args.split, model_config_name), exist_ok=True)
+    plt.savefig(os.path.join(args.split, model_config_name, filename))
 
 def main():
     sns.set_palette("bright")
@@ -285,9 +286,12 @@ def main():
 
     results = validate(args)
 
-    if args.results_file:
-        write_results(args.results_file, results)
-    
+    p = Path(args.checkpoint)
+    model_config_name = p.parent.name
+    results_file = os.path.join(args.split, model_config_name, "results.csv")
+    os.makedirs(os.path.join(args.split, model_config_name), exist_ok=True)
+    write_results(results_file, results)
+
 def write_results(results_file, results):
     with open(results_file, mode='w') as cf:
         if not isinstance(results, (list, tuple)):

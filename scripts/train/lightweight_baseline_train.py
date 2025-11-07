@@ -116,6 +116,8 @@ def train_one_epoch(model, loader, optimizer, loss_fn, device):
         ('top5', top5_m.avg),
         ('data_time', data_time_m.avg),
         ('update_time', update_time_m.avg),
+        ('total_data_time', data_time_m.sum),
+        ('total_update_time', update_time_m.sum),
         ('throughput', throughput)
     ])
     
@@ -129,15 +131,17 @@ def validate(model, loader, loss_fn, device):
     inference_time_m = utils.AverageMeter()
 
     model.eval()
-    data_start_time = update_start_time = time.time()
+    data_start_time = time.time()
     with torch.inference_mode():
         for batch_idx, (input, target) in enumerate(loader):
             data_time_m.update(time.time() - data_start_time)
             batch_size = input.shape[0]
 
+            inference_start_time = time.time()
+
             input = input.to(device=device)
             target = target.to(device=device)
-
+            
             output = model(input)
             if isinstance(output, (tuple, list)):
                 output = output[0]
@@ -148,20 +152,21 @@ def validate(model, loader, loss_fn, device):
             losses_m.update(loss.item(), batch_size)
             top1_m.update(acc1.item(), batch_size)
             top5_m.update(acc5.item(), batch_size)
-            
-            inference_time_m.update(time.time() - update_start_time)
+
+            inference_time_m.update(time.time() - inference_start_time)
 
             data_start_time = time.time()
-            update_start_time = time.time()
 
     throughput = top1_m.count / inference_time_m.sum
     
     metrics = OrderedDict([
-        ('loss', losses_m.avg), 
-        ('top1', top1_m.avg), 
+        ('loss', losses_m.avg),
+        ('top1', top1_m.avg),
         ('top5', top5_m.avg),
-        ('data_time', data_time_m.avg),
-        ('inference_time_m', inference_time_m.avg),
+        ('data_time_epoch', data_time_m.avg),
+        ('inference_time_epoch', inference_time_m.avg),
+        ('total_data_time', data_time_m.sum),
+        ('total_inference_time', inference_time_m.sum),
         ('throughput', throughput)
     ])
     
