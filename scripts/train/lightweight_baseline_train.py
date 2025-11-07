@@ -126,7 +126,7 @@ def validate(model, loader, loss_fn, device):
     top1_m = utils.AverageMeter()
     top5_m = utils.AverageMeter()
     data_time_m = utils.AverageMeter()
-    update_time_m = utils.AverageMeter()
+    inference_time_m = utils.AverageMeter()
 
     model.eval()
     data_start_time = update_start_time = time.time()
@@ -149,19 +149,19 @@ def validate(model, loader, loss_fn, device):
             top1_m.update(acc1.item(), batch_size)
             top5_m.update(acc5.item(), batch_size)
             
-            update_time_m.update(time.time() - update_start_time)
+            inference_time_m.update(time.time() - update_start_time)
 
             data_start_time = time.time()
             update_start_time = time.time()
 
-    throughput = top1_m.count / update_time_m.sum
+    throughput = top1_m.count / inference_time_m.sum
     
     metrics = OrderedDict([
         ('loss', losses_m.avg), 
         ('top1', top1_m.avg), 
         ('top5', top5_m.avg),
         ('data_time', data_time_m.avg),
-        ('update_time', update_time_m.avg),
+        ('inference_time_m', inference_time_m.avg),
         ('throughput', throughput)
     ])
     

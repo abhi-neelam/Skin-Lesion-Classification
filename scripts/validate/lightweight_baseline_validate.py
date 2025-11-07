@@ -155,15 +155,19 @@ def validate(args):
     losses = utils.AverageMeter()
     top1 = utils.AverageMeter()
     top5 = utils.AverageMeter()
+    data_time = utils.AverageMeter()
+    inference_time = utils.AverageMeter()
     
     if args.metrics_avg:
         all_preds = []
         all_targets = []
 
     model.eval()
+    data_start_time = update_start_time = time.time()
     with torch.inference_mode():
         feature_chunks = []
         for batch_idx, (input, target) in enumerate(loader):
+            data_time.update(time.time() - data_start_time)
             batch_size = input.shape[0]
 
             input = input.to(device=device)
@@ -183,6 +187,11 @@ def validate(args):
             top1.update(acc1.item(), batch_size)
             top5.update(acc5.item(), batch_size)
             
+            inference_time.update(time.time() - update_start_time)
+
+            data_start_time = time.time()
+            update_start_time = time.time()
+            
             if args.metrics_avg:
                 predictions = torch.argmax(output, dim=1)
                 all_preds.append(predictions.cpu())
@@ -191,6 +200,8 @@ def validate(args):
         feature_matrix = torch.cat(feature_chunks, dim=0).numpy()
 
     top1a, top5a = top1.avg, top5.avg
+    inference_time, data_time = inference_time.avg, data_time.avg
+    throughput = top1.count / inference_time.sum
 
     all_preds = torch.cat(all_preds).numpy()
     all_targets = torch.cat(all_targets).numpy()
@@ -242,6 +253,8 @@ def validate(args):
         model=args.model,
         top1=round(top1a, 4), top1_err=round(100 - top1a, 4),
         top5=round(top5a, 4), top5_err=round(100 - top5a, 4),
+        inference_time=round(inference_time, 4), data_time=round(data_time, 4),
+        throughput=round(throughput),
         **metric_results,
         param_count=round(param_count / 1e6, 2),
     )
