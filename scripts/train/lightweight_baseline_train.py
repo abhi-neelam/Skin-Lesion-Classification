@@ -294,7 +294,7 @@ def main():
         no_aug=True,
         num_workers=args.workers,
         pin_memory=args.pin_mem,
-        device=device
+        device=device,
         use_prefetcher=False,
     )
     
