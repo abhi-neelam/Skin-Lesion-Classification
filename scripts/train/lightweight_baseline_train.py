@@ -183,8 +183,8 @@ def parse_args():
                    help='Name of model to train (default: "mobilenetv3_large_100")')
     group.add_argument('--pretrained', action='store_true', default=False,
                    help='Start with pretrained version of specified network (if avail)')
-    group.add_argument('--onlineaugment', action='store_true', default=True,
-                   help='Online data augmentation procedure (default: True)')
+    group.add_argument('--onlineaugment', action='store_true', default=False,
+                   help='Online data augmentation procedure (default: False)')
     
     group.add_argument('--num-classes', type=int, default=None, metavar='N',
                    help='number of label classes (Model default if None)', required=True)
