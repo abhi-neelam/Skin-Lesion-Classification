@@ -14,7 +14,7 @@ from timm.models import create_model, safe_model_name, load_checkpoint
 from timm.utils import reparameterize_model
 import torchprofile
 from torchinfo import summary
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, classification_report
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, classification_report, log_loss
 from sklearn.preprocessing import label_binarize
 from sklearn.manifold import TSNE
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
@@ -36,6 +36,7 @@ import numpy as np
 import joblib
 import random
 import time
+import json
 import os
 
 def random_seed(seed=42):
@@ -289,12 +290,22 @@ def train(args):
     valid_predictions = clf.predict(X_valid)
     inference_time = time.time() - start_time
     
-    print("Total Training Time:", train_time)
-    print("Total Validation Inference Time:", inference_time)
-    print("Train accuracy:", accuracy_score(y_train, train_predictions))
-    print("Valid accuracy:", accuracy_score(y_valid, valid_predictions))
-
-    return clf
+    metrics = OrderedDict([
+        ('total_train_time', train_time),
+        ('validation_inference_time', inference_time),
+        ('train_accuracy', accuracy_score(y_train, train_predictions)),
+        ('validation_accuracy', accuracy_score(y_valid, valid_predictions)),
+    ])
+    
+    if args.classifier != "svc":
+        train_proba = clf.predict_proba(X_train)
+        valid_proba = clf.predict_proba(X_valid)
+        
+        metrics['validation_log_loss'] = log_loss(y_valid, valid_proba)
+        metrics['train_log_loss'] = log_loss(y_train, train_proba)
+    
+    print(metrics)
+    return clf, metrics
 
 def save_df(df, args, filename):
     p = Path(args.checkpoint)
@@ -330,12 +341,15 @@ def main():
 
     output_dir = utils.get_outdir(args.output if args.output else './output/train', exp_name)
     random_seed(args.seed)
-    clf = train(args)
+    clf, metrics = train(args)
 
     with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:
         f.write(args_text)
 
-    joblib.dump(clf, os.path.join(output_dir, "lgbm.pkl"))
+    with open(os.path.join(output_dir, 'summary.json'), "w") as f:
+        json.dump(metrics, f)
+
+    joblib.dump(clf, os.path.join(output_dir, "model.pkl"))
 
     if args.wandb_project:
         wandb.finish()
