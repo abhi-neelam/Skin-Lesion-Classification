@@ -139,7 +139,7 @@ def parse_args():
                     help='wandb tags', required=False)
     
     parser.add_argument('--classifier', default='lightgbm', type=str, metavar='CLF',
-                   help='name of classifier to use for fusion (default: lightgbm, options - lightgbm, xgboost, hgbc, svc, logistic)', required=True)
+                   help='name of classifier to use for fusion (default: lightgbm, options - lightgbm, xgboost, hgbc, svc, logistic)')
     
     args = parser.parse_args()
     
