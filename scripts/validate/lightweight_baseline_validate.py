@@ -226,7 +226,8 @@ def validate(args):
     if args.confusion_matrix:
         cm = confusion_matrix(all_targets, all_preds)
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
-        disp.plot()
+        disp.plot(cmap='Blues')
+        plt.title("Confusion Matrix")
         save_fig(args, "confusion_matrix.png")
 
     if args.tsne:
@@ -236,15 +237,18 @@ def validate(args):
         idx_to_class = {v: k for k, v in dataset.reader.class_to_idx.items()}
         target_labels = [idx_to_class[k] for k in all_targets.tolist()]
 
-        fig, ax = plt.subplots(figsize=(10, 6), constrained_layout=True)
+        fig, ax = plt.subplots(figsize=(10, 10), constrained_layout=True)
 
         sns.scatterplot(
             x=tsne_data[:,0], y=tsne_data[:,1],
             hue=target_labels,
             legend="full",
             palette="bright",
-            alpha=0.3
+            alpha=0.5,
+            s=10,
+            linewidth=0
         )
+        ax.set_axis_off()
         save_fig(args, "tsne.png")
 
     results = OrderedDict(
