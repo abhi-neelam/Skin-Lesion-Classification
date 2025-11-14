@@ -281,15 +281,15 @@ def validate(args):
 def save_df(df, args, filename):
     p = Path(args.classifier_checkpoint)
     model_config_name = p.parent.name
-    os.makedirs(model_config_name, exist_ok=True)
-    output_path = os.path.join(model_config_name, filename)
+    os.makedirs(os.path.join(args.split, model_config_name), exist_ok=True)
+    output_path = os.path.join(args.split, model_config_name, filename)
     df.to_csv(output_path, index=True)
 
 def save_fig(args, filename):
     p = Path(args.classifier_checkpoint)
     model_config_name = p.parent.name
-    os.makedirs(model_config_name, exist_ok=True)
-    plt.savefig(os.path.join(model_config_name, filename))
+    os.makedirs(os.path.join(args.split, model_config_name), exist_ok=True)
+    plt.savefig(os.path.join(args.split, model_config_name, filename))
 
 def main():
     sns.set_palette("bright")
@@ -300,12 +300,12 @@ def main():
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.benchmark = True
 
-    results = validate(args)
-    
     p = Path(args.classifier_checkpoint)
     model_config_name = p.parent.name
     results_file = os.path.join(args.split, model_config_name, "results.csv")
     os.makedirs(os.path.join(args.split, model_config_name), exist_ok=True)
+    
+    results = validate(args)
     write_results(results_file, results)
 
 def write_results(results_file, results):
