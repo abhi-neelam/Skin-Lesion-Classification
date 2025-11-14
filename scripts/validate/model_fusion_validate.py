@@ -65,9 +65,6 @@ def parse_args():
     parser.add_argument('--classifier-checkpoint', required=True, default='', type=str, metavar='PATH',
                     help='path to latest classifier checkpoint (default: none)')
 
-    parser.add_argument('--experiment', default='', type=str, metavar='NAME',
-                   help='name of train experiment, name of sub-folder for output', required=False)
-    
     parser.add_argument('--models', required=True, nargs='+', default='', type=str, metavar='MODEL',
                    help='Names of models to fuse (e.g: "mobilenetv3_large_100 resnet50")')
 
