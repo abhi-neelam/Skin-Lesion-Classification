@@ -92,8 +92,8 @@ def parse_args():
     parser.add_argument('--device', default='cuda', type=str,
                     help="Device (accelerator) to use.")
     
-    parser.add_argument('-j', '--workers', type=int, default=4, metavar='N',
-                   help='how many training processes to use (default: 4)')
+    parser.add_argument('-j', '--workers', type=int, default=16, metavar='N',
+                   help='how many training processes to use (default: 16)')
     
     parser.add_argument('--pin-mem', action='store_true', default=False,
                    help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')

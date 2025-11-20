@@ -218,10 +218,12 @@ def parse_args():
                    help='random seed (default: 42)')
     group.add_argument('--checkpoint-hist', type=int, default=10, metavar='N',
                    help='number of checkpoints to keep (default: 10)')
-    group.add_argument('-j', '--workers', type=int, default=4, metavar='N',
-                   help='how many training processes to use (default: 4)')
+    group.add_argument('-j', '--workers', type=int, default=16, metavar='N',
+                   help='how many training processes to use (default: 16)')
     group.add_argument('--pin-mem', action='store_true', default=False,
                    help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
+    group.add_argument('--torch-compile', default=False, action='store_true',
+                    help='Compile models for quick inference')
     group.add_argument('--output', default='', type=str, metavar='PATH',
                    help='path to output folder (default: none, current dir)', required=True)
     group.add_argument('--experiment', default='', type=str, metavar='NAME',
@@ -258,11 +260,14 @@ def main():
         dropout=args.drop,
         )
     
-    model.to(device=device)
+    model = model.to(device=device)
 
     model_summary = summary(model, input_size=(args.batch_size, 3, 224, 224))
     print(model_summary)
 
+    if args.torch_compile:
+        model = torch.compile(model, mode="reduce-overhead")
+        
     unfrozen_params = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = AdamW(unfrozen_params, lr=args.lr, weight_decay=args.weight_decay)
 

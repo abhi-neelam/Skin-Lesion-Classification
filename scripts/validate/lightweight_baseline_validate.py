@@ -70,14 +70,17 @@ def parse_args():
     parser.add_argument('--device', default='cuda', type=str,
                     help="Device (accelerator) to use.")
     
-    parser.add_argument('-j', '--workers', type=int, default=4, metavar='N',
-                   help='how many training processes to use (default: 4)')
+    parser.add_argument('-j', '--workers', type=int, default=16, metavar='N',
+                   help='how many training processes to use (default: 16)')
     
     parser.add_argument('--pin-mem', action='store_true', default=False,
                    help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     
     parser.add_argument('--reparam', default=False, action='store_true',
                     help='Reparameterize model')
+
+    parser.add_argument('--torch-compile', default=False, action='store_true',
+                    help='Compile models for quick inference')
 
     parser.add_argument('--data-dir', required=True, metavar='DIR',
                     help='path to dataset (root dir)')
@@ -127,6 +130,9 @@ def validate(args):
 
     model = model.to(device=device)
 
+    if args.torch_compile:
+        model = torch.compile(model, mode="reduce-overhead")
+
     criterion = nn.CrossEntropyLoss().to(device)
     
     dataset = create_dataset(
@@ -173,7 +179,7 @@ def validate(args):
             target = target.to(device=device)
 
             features = model.forward_head(input)
-            feature_chunks.append(features.cpu())
+            feature_chunks.append(features.cpu()) # TODO - can be optimized by pinning data
 
             output = model(input)
             if isinstance(output, (tuple, list)):

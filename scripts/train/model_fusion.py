@@ -109,8 +109,8 @@ def parse_args():
     parser.add_argument('--device', default='cuda', type=str,
                     help="Device (accelerator) to use.")
     
-    parser.add_argument('-j', '--workers', type=int, default=4, metavar='N',
-                   help='how many training processes to use (default: 4)')
+    parser.add_argument('-j', '--workers', type=int, default=16, metavar='N',
+                   help='how many training processes to use (default: 16)')
     
     parser.add_argument('--pin-mem', action='store_true', default=False,
                    help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
@@ -168,7 +168,7 @@ def get_pre_logits_and_labels(args, models, loader, device):
         model.eval()
 
     fused_model = FusionWrapper(models).to(device)
-    
+
     if args.torch_compile:
         fused_model = torch.compile(fused_model, mode="reduce-overhead")
 
@@ -283,7 +283,7 @@ def train(args):
     clf = None
     match args.classifier:
         case "lightgbm":
-            clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="cpu", verbosity=-1, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=args.early_stopping_rounds)
+            clf = LGBMClassifier(num_class=args.num_classes, n_estimators=args.trees, max_depth=args.max_depth, objective='multiclass', device_type="cpu", verbosity=-1, n_jobs=-1, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=args.early_stopping_rounds)
             start_time = time.time()
             clf.fit(X_train, y_train, eval_set=[(X_train, y_train), (X_valid, y_valid)], eval_metric="multi_logloss",
                 callbacks=[
@@ -292,7 +292,7 @@ def train(args):
                 ]
             )
         case "xgboost":
-            clf = xgb.XGBClassifier(n_estimators=args.trees, max_depth=args.max_depth, eval_metric="mlogloss", objective='multi:softprob', device="cpu", verbosity=0, n_jobs=args.workers, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=args.early_stopping_rounds)
+            clf = xgb.XGBClassifier(n_estimators=args.trees, max_depth=args.max_depth, eval_metric="mlogloss", objective='multi:softprob', device="cpu", verbosity=0, n_jobs=-1, random_state=args.seed, learning_rate=args.lr, reg_lambda=args.weight_decay, early_stopping_rounds=args.early_stopping_rounds)
             start_time = time.time()
             clf.fit(X_train, y_train, eval_set=[(X_train, y_train), (X_valid, y_valid)], verbose=True)
         case "hgbc":
@@ -304,7 +304,7 @@ def train(args):
             start_time = time.time()
             clf.fit(X_train, y_train)
         case "logistic":
-            clf = LogisticRegression(random_state=args.seed, C=args.C, solver='lbfgs', max_iter=args.trees, verbose=1, n_jobs=args.workers)
+            clf = LogisticRegression(random_state=args.seed, C=args.C, solver='lbfgs', max_iter=args.trees, verbose=1, n_jobs=-1)
             start_time = time.time()
             clf.fit(X_train, y_train)
     train_time = time.time() - start_time
