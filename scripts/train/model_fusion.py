@@ -71,6 +71,19 @@ class LightWeight_Baseline(nn.Module):
     def forward(self, x):
         x = self.model(x)
         return x
+    
+class FusionWrapper(torch.nn.Module):
+    def __init__(self, models):
+        super().__init__()
+        self.models = torch.nn.ModuleList(models)
+
+    def forward(self, x):
+        outputs = []
+        for model in self.models:
+            out = model.forward_head(x)
+            out = torch.nn.functional.normalize(out, dim=1)
+            outputs.append(out)
+        return torch.cat(outputs, dim=1)
 
 def parse_args():
     parser = argparse.ArgumentParser(description='PyTorch Validation')
@@ -105,6 +118,9 @@ def parse_args():
     parser.add_argument('--reparam', default=False, action='store_true',
                     help='Reparameterize model')
 
+    parser.add_argument('--torch-compile', default=False, action='store_true',
+                    help='Compile models for quick inference')
+    
     parser.add_argument('--normalize', action='store_true', default=True,
                    help='Normalize features before fusion')
 
@@ -151,39 +167,48 @@ def get_pre_logits_and_labels(args, models, loader, device):
     for model in models:
         model.eval()
 
-    features_np = []
-    targets_np = []
+    fused_model = FusionWrapper(models).to(device)
+    
+    if args.torch_compile:
+        fused_model = torch.compile(fused_model, mode="reduce-overhead")
+
+    total_samples = len(loader.dataset)
+    dummy_input = torch.randn(args.batch_size, 3, 224, 224, device=device)
     with torch.inference_mode():
-        for batch_idx, (input, target) in enumerate(loader):
-            # batch_size = input.shape[0]
+        feature_dim = fused_model(dummy_input).shape[1]
 
-            input = input.to(device=device)
-            target = target.to(device=device)
+    features_all = torch.empty((total_samples, feature_dim), dtype=torch.float32, pin_memory=True)
+    targets_all = torch.empty((total_samples), dtype=torch.long, pin_memory=True)
 
-            fused_features = []
-            for model in models:
-                features = model.forward_head(input) # (batch_size, feature_count)
-                
-                if args.normalize:
-                    features = nn.functional.normalize(features, dim=1) # normalize each model feature vector
+    start_idx = 0
 
-                fused_features.append(features)
+    fusion_start_time = time.time()
 
-            fused_features = torch.cat(fused_features, dim=1)
-            features_np.append(fused_features.cpu())
-            targets_np.append(target.cpu())
-    features_np = torch.cat(features_np, dim=0).numpy()
-    targets_np = torch.cat(targets_np, dim=0).numpy()
+    with torch.inference_mode():
+        for input, target in loader:
+            batch_size = input.shape[0]
+            end_idx = start_idx + batch_size
+            
+            input = input.to(device, non_blocking=True)
+            
+            output = fused_model(input)
+            
+            features_all[start_idx: end_idx].copy_(output, non_blocking=True)
+            targets_all[start_idx: end_idx].copy_(target, non_blocking=True)
+            
+            start_idx = end_idx
+
+    torch.cuda.synchronize()
+    
+    features_np = features_all.numpy()
+    targets_np = targets_all.numpy()
     
     X = features_np
     y = targets_np
     
     assert np.isfinite(X).all()
     
-    cols = [f"Column_{i}" for i in range(X.shape[1])]
-    X = pd.DataFrame(X, columns=cols)
-    
-    return X, y
+    return X, y, fusion_start_time
 
 def train(args):
     if torch.cuda.is_available():
@@ -249,8 +274,8 @@ def train(args):
         device=device
     )
 
-    X_train, y_train = get_pre_logits_and_labels(args, models, loader_train, device)
-    X_valid, y_valid = get_pre_logits_and_labels(args, models, loader_eval, device)
+    X_train, y_train, _ = get_pre_logits_and_labels(args, models, loader_train, device)
+    X_valid, y_valid, _ = get_pre_logits_and_labels(args, models, loader_eval, device)
 
     eval_result = {}
     start_time = 0
