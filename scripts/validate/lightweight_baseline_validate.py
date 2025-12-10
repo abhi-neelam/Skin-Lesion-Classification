@@ -45,9 +45,15 @@ class LightWeight_Baseline(nn.Module):
         x = self.model.forward_features(x)
         return self.model.forward_head(x, pre_logits=True)
 
-    def forward(self, x):
-        x = self.model(x)
+    def classifier(self, x):
+        if hasattr(self.model, 'classifier'):
+            x = self.model.classifier(x)
+        else:
+            x = self.model.head(x)
         return x
+
+    def forward(self, x):
+        return self.model(x)
 
 def parse_args():
     parser = argparse.ArgumentParser(description='PyTorch Validation')
@@ -175,7 +181,7 @@ def validate(args):
             features = model.forward_head(input)
             feature_chunks.append(features.cpu())
 
-            output = model(input)
+            output = model.classifier(features)
             if isinstance(output, (tuple, list)):
                 output = output[0]
 
