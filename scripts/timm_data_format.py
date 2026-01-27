@@ -38,16 +38,6 @@ def safe_copy(src_path, dst_path):
         k += 1
     shutil.copyfile(src_path, cand)
 
-def norm_split(s):
-    s = str(s).strip().lower()
-    if s in ["train", "training", "tr"]:
-        return "train"
-    if s in ["validation", "val", "valid", "dev"]:
-        return "validation"
-    if s in ["test", "testing", "te"]:
-        return "test"
-    return None
-
 if ADD_ISIC_2019:
     train_img_labels = pd.read_csv(isic_train_annotations_file)
 
@@ -82,18 +72,21 @@ if ADD_ISIC_2019:
 if ADD_DERM12345:
     derm_df = pd.read_csv(derm_train_annotations_file) # read derm annotations file
 
-    for _, row in derm_df.iterrows():
-        split = norm_split(row["split"])
-        if split is None:
-            continue
-        leaf = str(row["label"]).strip()
-        if leaf not in leaf_to_isic:
-            continue
-        col_name = leaf_to_isic[leaf]
-        isic_id = str(row["isic_id"]).strip()
-        os.makedirs(f"{out_dir}/{split}/{col_name}", exist_ok=True)
-        dst_name = f"derm_{isic_id}.jpg"
-        safe_copy(
-            f"{derm_train_data_folder_path}/{isic_id}.jpg",
-            f"{out_dir}/{split}/{col_name}/{dst_name}"
-        ) # copy image to directory
+    derm_train_samples = derm_df.sample(frac=0.80, random_state=42)
+    derm_remainder = derm_df.drop(derm_train_samples.index)
+    derm_valid_samples = derm_remainder.sample(frac=0.50, random_state=42)
+    derm_test_samples = derm_remainder.drop(derm_valid_samples.index)
+
+    for split, samples_df in zip(["train", "validation", "test"], [derm_train_samples, derm_valid_samples, derm_test_samples]):
+        for _, row in samples_df.iterrows():
+            leaf = str(row["label"]).strip()
+            if leaf not in leaf_to_isic:
+                continue
+            col_name = leaf_to_isic[leaf]
+            isic_id = str(row["isic_id"]).strip()
+            os.makedirs(f"{out_dir}/{split}/{col_name}", exist_ok=True)
+            dst_name = f"derm_{isic_id}.jpg"
+            safe_copy(
+                f"{derm_train_data_folder_path}/{isic_id}.jpg",
+                f"{out_dir}/{split}/{col_name}/{dst_name}"
+            ) # copy image to directory
