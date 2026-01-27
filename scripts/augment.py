@@ -4,8 +4,8 @@ from PIL import Image
 from torchvision.transforms import v2
 from torchvision.transforms import InterpolationMode
 
-input_dir = "../data/ISIC_2019_timm"
-output_dir = "../data/ISIC_2019_timm_augmented"
+input_dir = "../data/ISIC_2019_derm12345_timm"
+output_dir = "../data/ISIC_2019_derm12345_timm_augmented"
 
 shutil.copytree(input_dir, output_dir, dirs_exist_ok=True) # copy entire ISIC 2019 directory
 
