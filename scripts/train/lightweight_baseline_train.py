@@ -118,8 +118,6 @@ def train_one_epoch(model, loader, optimizer, loss_fn, gpu_aug, device):
                     data_start_time = time.time()
                     update_start_time = time.time()
 
-                    break
-
     print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
     throughput = top1_m.count / update_time_m.sum
     
@@ -391,8 +389,6 @@ def main():
                 gpu_aug,
                 device
             )
-        
-        
         
         eval_metrics = validate(
                     model,
