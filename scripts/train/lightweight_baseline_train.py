@@ -25,6 +25,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from imblearn.metrics import sensitivity_score, specificity_score
 import matplotlib.pyplot as plt
 import kornia.augmentation as K
+from pyinstrument import Profiler
 from functools import partial
 from collections import OrderedDict
 from datetime import datetime
@@ -380,6 +381,9 @@ def main():
     lr_scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=args.warmup_epochs, num_training_steps=args.epochs) # TODO - step per epoch or per batch?
 
     for epoch in range(0, args.epochs):
+        profiler = Profiler()
+        profiler.start()
+
         train_metrics = train_one_epoch(
                 model,
                 loader_train,
@@ -388,6 +392,10 @@ def main():
                 gpu_aug,
                 device
             )
+        
+        profiler.stop()
+        profiler.open_in_browser()
+        break
         
         eval_metrics = validate(
                     model,
