@@ -23,6 +23,7 @@ from sklearn.preprocessing import label_binarize
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from imblearn.metrics import sensitivity_score, specificity_score
 import matplotlib.pyplot as plt
+import kornia.augmentation as K
 from functools import partial
 from collections import OrderedDict
 from datetime import datetime
@@ -68,7 +69,7 @@ def experiment_name(args):
             '224'
         ])
 
-def train_one_epoch(model, loader, optimizer, loss_fn, device):
+def train_one_epoch(model, loader, optimizer, loss_fn, gpu_aug, device):
     losses_m = utils.AverageMeter()
     top1_m = utils.AverageMeter()
     top5_m = utils.AverageMeter()
@@ -84,8 +85,11 @@ def train_one_epoch(model, loader, optimizer, loss_fn, device):
         
         batch_size = input.shape[0]
 
-        input = input.to(device=device)
+        input = input.to(device, non_blocking=True)
         target = target.to(device=device)
+
+        if gpu_aug is not None:
+            input = gpu_aug(input)
 
         output = model(input)
         if isinstance(output, (tuple, list)):
@@ -306,20 +310,24 @@ def main():
                                             no_aug=True,
                                             mean=data_cfg['mean'], 
                                             std=data_cfg['std'])
+    gpu_aug = None
 
     if args.onlineaugment:
         dataset_train.transform = v2.Compose([
-            v2.RandomAffine(
+            # v2.ToImage(),
+            # v2.ToDtype(torch.float32, scale=True)
+        ])
+
+        gpu_aug = torch.nn.Sequential(
+            K.RandomAffine(
                 degrees=(45, 180),
                 translate=(0.125, 0.125),
-                scale=(0.90, 1.10),
-                interpolation=InterpolationMode.BILINEAR
+                scale=(0.90, 1.10)
             ),
-            v2.RandomHorizontalFlip(p=0.5),
-            v2.RandomVerticalFlip(p=0.5),
-            v2.ColorJitter(brightness=0.20, contrast=0.15, saturation=0.10),
-            base_train_transform
-        ])
+            K.RandomHorizontalFlip(p=0.5),
+            K.RandomVerticalFlip(p=0.5),
+            K.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02, p=0.8)
+        ).to(device)
 
     loader_eval = create_loader(
         dataset_eval,
@@ -364,6 +372,7 @@ def main():
                 loader_train,
                 optimizer,
                 train_loss_fn,
+                gpu_aug,
                 device
             )
         

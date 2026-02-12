@@ -20,3 +20,4 @@ seaborn==0.13.2
 lightgbm==4.6.0
 xgboost-cpu==3.1.0
 pyyaml==6.0.3
+kornia==0.8.2
