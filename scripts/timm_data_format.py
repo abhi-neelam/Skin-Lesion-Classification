@@ -5,6 +5,7 @@ import shutil
 
 ADD_ISIC_2019 = True
 ADD_DERM12345 = True
+EXCLUDE_DERM12345_NV = True
 
 isic_train_data_folder_path = "../data/ISIC_2019_Training_Input"
 isic_train_annotations_file = "../data/ISIC_2019_Training_GroundTruth.csv"
@@ -82,7 +83,13 @@ if ADD_DERM12345:
             leaf = str(row["label"]).strip()
             if leaf not in leaf_to_isic:
                 continue
+
             col_name = leaf_to_isic[leaf]
+
+            # optionally exclude NV from derm12345
+            if EXCLUDE_DERM12345_NV and col_name == "NV":
+                continue
+
             isic_id = str(row["isic_id"]).strip()
             os.makedirs(f"{out_dir}/{split}/{col_name}", exist_ok=True)
             dst_name = f"derm_{isic_id}.jpg"
