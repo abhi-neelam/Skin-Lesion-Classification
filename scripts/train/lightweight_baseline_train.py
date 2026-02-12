@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision.transforms import v2
 from torchvision.transforms import InterpolationMode
+from torch.profiler import profile, ProfilerActivity, record_function
 from timm import utils
 from timm.data import create_dataset, create_transform, resolve_data_config
 from timm.data.loader import create_loader
@@ -80,38 +81,45 @@ def train_one_epoch(model, loader, optimizer, loss_fn, gpu_aug, device):
 
     data_start_time = update_start_time = time.time()
     optimizer.zero_grad()
-    for batch_idx, (input, target) in enumerate(loader):
-        data_time_m.update(time.time() - data_start_time)
-        
-        batch_size = input.shape[0]
 
-        input = input.to(device, non_blocking=True)
-        target = target.to(device=device)
+    with profile(activities=[
+        ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+            with record_function("model_inference"):
+                for batch_idx, (input, target) in enumerate(loader):
+                    data_time_m.update(time.time() - data_start_time)
+                    
+                    batch_size = input.shape[0]
 
-        if gpu_aug is not None:
-            input = gpu_aug(input)
+                    input = input.to(device, non_blocking=True)
+                    target = target.to(device=device)
 
-        output = model(input)
-        if isinstance(output, (tuple, list)):
-            output = output[0]
+                    if gpu_aug is not None:
+                        input = gpu_aug(input)
 
-        loss = loss_fn(output, target)
-        acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
+                    output = model(input)
+                    if isinstance(output, (tuple, list)):
+                        output = output[0]
 
-        loss.backward()
-        optimizer.step()
+                    loss = loss_fn(output, target)
+                    acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
 
-        losses_m.update(loss.item(), batch_size)
-        top1_m.update(acc1.item(), batch_size)
-        top5_m.update(acc5.item(), batch_size)
+                    loss.backward()
+                    optimizer.step()
 
-        optimizer.zero_grad()
+                    losses_m.update(loss.item(), batch_size)
+                    top1_m.update(acc1.item(), batch_size)
+                    top5_m.update(acc5.item(), batch_size)
 
-        update_time_m.update(time.time() - update_start_time)
+                    optimizer.zero_grad()
 
-        data_start_time = time.time()
-        update_start_time = time.time()
+                    update_time_m.update(time.time() - update_start_time)
 
+                    data_start_time = time.time()
+                    update_start_time = time.time()
+
+                    break
+
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
     throughput = top1_m.count / update_time_m.sum
     
     metrics = OrderedDict([
