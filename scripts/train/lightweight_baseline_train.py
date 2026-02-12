@@ -253,6 +253,8 @@ def parse_args():
     return args, args_text
 
 def main():
+    profiler = Profiler()
+    profiler.start()
     args, args_text = parse_args()
 
     if torch.cuda.is_available():
@@ -381,9 +383,6 @@ def main():
     lr_scheduler = get_cosine_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=args.warmup_epochs, num_training_steps=args.epochs) # TODO - step per epoch or per batch?
 
     for epoch in range(0, args.epochs):
-        profiler = Profiler()
-        profiler.start()
-
         train_metrics = train_one_epoch(
                 model,
                 loader_train,
@@ -393,9 +392,7 @@ def main():
                 device
             )
         
-        profiler.stop()
-        profiler.open_in_browser()
-        break
+        
         
         eval_metrics = validate(
                     model,
@@ -414,6 +411,19 @@ def main():
 
         saver.save_checkpoint(epoch, metric=eval_metrics['top1'])
         lr_scheduler.step()
+
+    profiler.stop()
+    profiler.open_in_browser()
+
+    # hang forever to test profiler
+    while True:
+        try:
+            time.sleep(10)
+        except KeyboardInterrupt:
+            print("Program interrupted by user. Exiting.")
+            break
+        except Exception as e:
+            print(f"An error occurred: {e}. Restarting the loop.")
 
 if __name__ == '__main__':
     main()
