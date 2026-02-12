@@ -314,7 +314,7 @@ def main():
 
     if args.onlineaugment:
         dataset_train.transform = v2.Compose([
-            # v2.ToImage(),
+            v2.ToImage(),
             # v2.ToDtype(torch.float32, scale=True)
         ])
 
