@@ -413,7 +413,8 @@ def main():
         lr_scheduler.step()
 
     profiler.stop()
-    profiler.open_in_browser()
+    #profiler.open_in_browser()
+    profiler.print()
 
     # hang forever to test profiler
     while True:
