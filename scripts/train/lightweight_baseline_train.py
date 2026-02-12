@@ -314,9 +314,13 @@ def main():
 
     if args.onlineaugment:
         dataset_train.transform = v2.Compose([
+            v2.Resize((224, 224), interpolation=InterpolationMode.BILINEAR),
             v2.ToImage(),
-            # v2.ToDtype(torch.float32, scale=True)
+            v2.ToDtype(torch.float32, scale=True)
         ])
+
+        mean = torch.tensor(data_cfg['mean'], device=device)
+        std  = torch.tensor(data_cfg['std'], device=device)
 
         gpu_aug = torch.nn.Sequential(
             K.RandomAffine(
@@ -326,7 +330,8 @@ def main():
             ),
             K.RandomHorizontalFlip(p=0.5),
             K.RandomVerticalFlip(p=0.5),
-            K.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02, p=0.8)
+            K.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02, p=0.8),
+            K.Normalize(mean=mean, std=std),
         ).to(device)
 
     loader_eval = create_loader(
