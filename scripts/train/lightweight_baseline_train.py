@@ -314,16 +314,10 @@ def main():
     args.rank = args.local_rank = 0
     data_cfg = resolve_data_config(vars(args), model=model, verbose=utils.is_primary(args))
     
-    base_train_transform = create_transform(input_size=(3,224,224), 
-                                            is_training=True, 
-                                            no_aug=True,
-                                            mean=data_cfg['mean'], 
-                                            std=data_cfg['std'])
     gpu_aug = None
 
     if args.onlineaugment:
         dataset_train.transform = v2.Compose([
-            v2.Resize((224, 224), interpolation=InterpolationMode.BILINEAR),
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True)
         ])
@@ -409,18 +403,8 @@ def main():
         lr_scheduler.step()
 
     profiler.stop()
-    #profiler.open_in_browser()
+    profiler.open_in_browser()
     profiler.print()
-
-    # hang forever to test profiler
-    while True:
-        try:
-            time.sleep(10)
-        except KeyboardInterrupt:
-            print("Program interrupted by user. Exiting.")
-            break
-        except Exception as e:
-            print(f"An error occurred: {e}. Restarting the loop.")
 
 if __name__ == '__main__':
     main()
