@@ -10,7 +10,6 @@ output_dir = "../data/ISIC_2019_derm12345_timm_augmented"
 shutil.copytree(input_dir, output_dir, dirs_exist_ok=True) # copy entire ISIC 2019 directory
 
 transforms = v2.Compose([
-    v2.Resize((224, 224), interpolation=InterpolationMode.BILINEAR),
     v2.RandomAffine(
         degrees=(45, 180),
         translate=(0.125, 0.125),
