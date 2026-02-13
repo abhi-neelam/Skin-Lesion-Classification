@@ -1,10 +1,13 @@
 import os
 import pandas as pd
 import numpy as np
-import shutil
+from PIL import Image
 
 ADD_ISIC_2019 = True
 ADD_DERM12345 = True
+EXCLUDE_DERM12345_NV = True
+
+TARGET_SIZE = (224, 224)
 
 isic_train_data_folder_path = "../data/ISIC_2019_Training_Input"
 isic_train_annotations_file = "../data/ISIC_2019_Training_GroundTruth.csv"
@@ -29,14 +32,23 @@ derm_isic_class_mapping_dict = {
 
 leaf_to_isic = {leaf: k for k, vs in derm_isic_class_mapping_dict.items() for leaf in vs}
 
-def safe_copy(src_path, dst_path):
+def _unique_dst_path(dst_path: str) -> str:
     base, ext = os.path.splitext(dst_path)
     cand = dst_path
     k = 1
     while os.path.exists(cand):
         cand = f"{base}_{k}{ext}"
         k += 1
-    shutil.copyfile(src_path, cand)
+    return cand
+
+def safe_resize_and_save(src_path: str, dst_path: str, size=TARGET_SIZE) -> None:
+    os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+    dst_path = _unique_dst_path(dst_path)
+
+    with Image.open(src_path) as im:
+        im = im.convert("RGB")
+        im = im.resize(size, resample=Image.LANCZOS)
+        im.save(dst_path, format="JPEG", quality=95, optimize=True)
 
 if ADD_ISIC_2019:
     train_img_labels = pd.read_csv(isic_train_annotations_file)
@@ -64,7 +76,7 @@ if ADD_ISIC_2019:
             name = tup[0]
             label = labels[i]
             col_name = column_names[label]
-            safe_copy(
+            safe_resize_and_save(
                 f"{isic_train_data_folder_path}/{name}.jpg",
                 f"{out_dir}/{split}/{col_name}/{name}.jpg"
             ) # copy image to directory
@@ -82,11 +94,17 @@ if ADD_DERM12345:
             leaf = str(row["label"]).strip()
             if leaf not in leaf_to_isic:
                 continue
+
             col_name = leaf_to_isic[leaf]
+
+            # optionally exclude NV from derm12345
+            if EXCLUDE_DERM12345_NV and col_name == "NV":
+                continue
+
             isic_id = str(row["isic_id"]).strip()
             os.makedirs(f"{out_dir}/{split}/{col_name}", exist_ok=True)
             dst_name = f"derm_{isic_id}.jpg"
-            safe_copy(
+            safe_resize_and_save(
                 f"{derm_train_data_folder_path}/{isic_id}.jpg",
                 f"{out_dir}/{split}/{col_name}/{dst_name}"
             ) # copy image to directory
