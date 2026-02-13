@@ -29,6 +29,7 @@ from pyinstrument import Profiler
 from functools import partial
 from collections import OrderedDict
 from datetime import datetime
+from contextlib import nullcontext
 import pandas as pd
 import numpy as np
 import random
@@ -71,7 +72,7 @@ def experiment_name(args):
             '224'
         ])
 
-def train_one_epoch(model, loader, optimizer, loss_fn, gpu_aug, device):
+def train_one_epoch(args, model, loader, optimizer, loss_fn, gpu_aug, device):
     losses_m = utils.AverageMeter()
     top1_m = utils.AverageMeter()
     top5_m = utils.AverageMeter()
@@ -83,42 +84,48 @@ def train_one_epoch(model, loader, optimizer, loss_fn, gpu_aug, device):
     data_start_time = update_start_time = time.time()
     optimizer.zero_grad()
 
-    with profile(activities=[
-        ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
-            with record_function("model_inference"):
-                for batch_idx, (input, target) in enumerate(loader):
-                    data_time_m.update(time.time() - data_start_time)
-                    
-                    batch_size = input.shape[0]
+    prof = torch.profiler.profile(
+        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+        record_shapes=True
+    ) if args.profile else nullcontext()
+    
+    with prof:
+        with record_function("model_inference"):
+            for batch_idx, (input, target) in enumerate(loader):
+                data_time_m.update(time.time() - data_start_time)
+                
+                batch_size = input.shape[0]
 
-                    input = input.to(device, non_blocking=True)
-                    target = target.to(device=device)
+                input = input.to(device, non_blocking=True)
+                target = target.to(device=device)
 
-                    if gpu_aug is not None:
-                        input = gpu_aug(input)
+                if gpu_aug is not None:
+                    input = gpu_aug(input)
 
-                    output = model(input)
-                    if isinstance(output, (tuple, list)):
-                        output = output[0]
+                output = model(input)
+                if isinstance(output, (tuple, list)):
+                    output = output[0]
 
-                    loss = loss_fn(output, target)
-                    acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
+                loss = loss_fn(output, target)
+                acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
 
-                    loss.backward()
-                    optimizer.step()
+                loss.backward()
+                optimizer.step()
 
-                    losses_m.update(loss.item(), batch_size)
-                    top1_m.update(acc1.item(), batch_size)
-                    top5_m.update(acc5.item(), batch_size)
+                losses_m.update(loss.item(), batch_size)
+                top1_m.update(acc1.item(), batch_size)
+                top5_m.update(acc5.item(), batch_size)
 
-                    optimizer.zero_grad()
+                optimizer.zero_grad()
 
-                    update_time_m.update(time.time() - update_start_time)
+                update_time_m.update(time.time() - update_start_time)
 
-                    data_start_time = time.time()
-                    update_start_time = time.time()
+                data_start_time = time.time()
+                update_start_time = time.time()
 
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    if args.profile:
+        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+
     throughput = top1_m.count / update_time_m.sum
     
     metrics = OrderedDict([
@@ -196,6 +203,8 @@ def parse_args():
                    help='Start with pretrained version of specified network (if avail)')
     group.add_argument('--onlineaugment', action='store_true', default=False,
                    help='Online data augmentation procedure (default: False)')
+    group.add_argument('--profile', action='store_true', default=False,
+                   help='Enable profiling of cpu and torch functions (default: False)')
     
     group.add_argument('--num-classes', type=int, default=None, metavar='N',
                    help='number of label classes (Model default if None)', required=True)
@@ -251,8 +260,10 @@ def parse_args():
     return args, args_text
 
 def main():
-    profiler = Profiler()
-    profiler.start()
+    if args.profile:
+        profiler = Profiler()
+        profiler.start()
+
     args, args_text = parse_args()
 
     if torch.cuda.is_available():
@@ -376,6 +387,7 @@ def main():
 
     for epoch in range(0, args.epochs):
         train_metrics = train_one_epoch(
+                args,
                 model,
                 loader_train,
                 optimizer,
@@ -402,9 +414,10 @@ def main():
         saver.save_checkpoint(epoch, metric=eval_metrics['top1'])
         lr_scheduler.step()
 
-    profiler.stop()
-    profiler.open_in_browser()
-    profiler.print()
+    if args.profile:
+        profiler.stop()
+        profiler.open_in_browser()
+        profiler.print()
 
 if __name__ == '__main__':
     main()
