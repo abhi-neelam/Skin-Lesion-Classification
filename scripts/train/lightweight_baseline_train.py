@@ -260,11 +260,11 @@ def parse_args():
     return args, args_text
 
 def main():
+    args, args_text = parse_args()
+
     if args.profile:
         profiler = Profiler()
         profiler.start()
-
-    args, args_text = parse_args()
 
     if torch.cuda.is_available():
         torch.backends.cuda.matmul.allow_tf32 = True
