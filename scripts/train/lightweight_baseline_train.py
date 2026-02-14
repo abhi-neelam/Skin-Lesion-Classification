@@ -82,7 +82,7 @@ def train_one_epoch(args, model, loader, optimizer, loss_fn, gpu_aug, device):
     model.train()
 
     data_start_time = update_start_time = time.time()
-    optimizer.zero_grad()
+    optimizer.zero_grad(set_to_none=True)
 
     prof = torch.profiler.profile(
         activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
@@ -97,7 +97,7 @@ def train_one_epoch(args, model, loader, optimizer, loss_fn, gpu_aug, device):
                 batch_size = input.shape[0]
 
                 input = input.to(device, non_blocking=True)
-                target = target.to(device=device)
+                target = target.to(device=device, non_blocking=True)
 
                 if gpu_aug is not None:
                     input = gpu_aug(input)
@@ -116,7 +116,7 @@ def train_one_epoch(args, model, loader, optimizer, loss_fn, gpu_aug, device):
                 top1_m.update(acc1.item(), batch_size)
                 top5_m.update(acc5.item(), batch_size)
 
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
 
                 update_time_m.update(time.time() - update_start_time)
 
