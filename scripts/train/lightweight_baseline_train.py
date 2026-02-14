@@ -87,7 +87,7 @@ def train_one_epoch(args, model, loader, optimizer, loss_fn, gpu_aug, device):
     prof = torch.profiler.profile(
         activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
         record_shapes=True
-    ) if args.profile else nullcontext()
+    ) if False else nullcontext()
     
     with prof:
         with record_function("model_inference"):
@@ -122,9 +122,6 @@ def train_one_epoch(args, model, loader, optimizer, loss_fn, gpu_aug, device):
 
                 data_start_time = time.time()
                 update_start_time = time.time()
-
-    if args.profile:
-        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 
     throughput = top1_m.count / update_time_m.sum
     
