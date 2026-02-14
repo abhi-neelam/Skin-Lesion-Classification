@@ -335,7 +335,7 @@ def main():
             ),
             v2.RandomHorizontalFlip(p=0.5),
             v2.RandomVerticalFlip(p=0.5),
-            v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02, p=0.8),
+            v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02),
             v2.Normalize(mean=torch.tensor(data_cfg['mean']), std=torch.tensor(data_cfg['std']))
         ])
 
