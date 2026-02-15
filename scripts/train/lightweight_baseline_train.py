@@ -72,7 +72,7 @@ def experiment_name(args):
             '224'
         ])
 
-def train_one_epoch(args, model, loader, optimizer, loss_fn, gpu_aug, device):
+def train_one_epoch(args, model, loader, optimizer, loss_fn, device):
     losses_m = utils.AverageMeter()
     top1_m = utils.AverageMeter()
     top5_m = utils.AverageMeter()
@@ -98,9 +98,6 @@ def train_one_epoch(args, model, loader, optimizer, loss_fn, gpu_aug, device):
 
                 input = input.to(device, non_blocking=True)
                 target = target.to(device=device, non_blocking=True)
-
-                if gpu_aug is not None:
-                    input = gpu_aug(input)
 
                 output = model(input)
                 if isinstance(output, (tuple, list)):
@@ -321,29 +318,27 @@ def main():
     
     args.rank = args.local_rank = 0
     data_cfg = resolve_data_config(vars(args), model=model, verbose=utils.is_primary(args))
-    
-    gpu_aug = None
+
+    base_train_transform = create_transform(input_size=(3,224,224), 
+                                            is_training=True, 
+                                            no_aug=True,
+                                            mean=data_cfg['mean'], 
+                                            std=data_cfg['std'])
 
     if args.onlineaugment:
         dataset_train.transform = v2.Compose([
             v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True)
-        ])
-
-        mean = torch.tensor(data_cfg['mean'], device=device)
-        std  = torch.tensor(data_cfg['std'], device=device)
-
-        gpu_aug = torch.nn.Sequential(
-            K.RandomAffine(
+            v2.ToDtype(torch.float32, scale=True),
+            v2.RandomAffine(
                 degrees=(45, 180),
                 translate=(0.125, 0.125),
                 scale=(0.90, 1.10)
             ),
-            K.RandomHorizontalFlip(p=0.5),
-            K.RandomVerticalFlip(p=0.5),
-            K.ColorJiggle(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02),
-            K.Normalize(mean=mean, std=std),
-        ).to(device)
+            v2.RandomHorizontalFlip(p=0.5),
+            v2.RandomVerticalFlip(p=0.5),
+            v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02),
+            base_train_transform
+        ])
 
     loader_eval = create_loader(
         dataset_eval,
@@ -389,7 +384,6 @@ def main():
                 loader_train,
                 optimizer,
                 train_loss_fn,
-                gpu_aug,
                 device
             )
         
