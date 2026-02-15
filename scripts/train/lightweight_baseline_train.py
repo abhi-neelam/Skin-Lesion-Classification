@@ -327,16 +327,7 @@ def main():
     if args.onlineaugment:
         dataset_train.transform = v2.Compose([
             v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True),
-            v2.RandomAffine(
-                degrees=(45, 180),
-                translate=(0.125, 0.125),
-                scale=(0.90, 1.10)
-            ),
-            v2.RandomHorizontalFlip(p=0.5),
-            v2.RandomVerticalFlip(p=0.5),
-            v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02),
-            v2.Normalize(mean=torch.tensor(data_cfg['mean']), std=torch.tensor(data_cfg['std']))
+            v2.ToDtype(torch.float32, scale=True)
         ])
 
         mean = torch.tensor(data_cfg['mean'], device=device)
@@ -350,12 +341,10 @@ def main():
             ),
             K.RandomHorizontalFlip(p=0.5),
             K.RandomVerticalFlip(p=0.5),
-            K.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02, p=0.8),
+            K.ColorJiggle(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02),
             K.Normalize(mean=mean, std=std),
         ).to(device)
-    
-    gpu_aug = None # disable gpu aug for now
-    
+
     loader_eval = create_loader(
         dataset_eval,
         input_size=(3, 224, 224),
