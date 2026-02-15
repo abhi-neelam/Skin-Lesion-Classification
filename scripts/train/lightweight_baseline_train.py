@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset, DataLoader, random_split
 from torchvision.transforms import v2
 from torchvision.transforms import InterpolationMode
+from torch.profiler import profile, ProfilerActivity, record_function
 from timm import utils
 from timm.data import create_dataset, create_transform, resolve_data_config
 from timm.data.loader import create_loader
@@ -24,9 +25,11 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from imblearn.metrics import sensitivity_score, specificity_score
 import matplotlib.pyplot as plt
 import kornia.augmentation as K
+from pyinstrument import Profiler
 from functools import partial
 from collections import OrderedDict
 from datetime import datetime
+from contextlib import nullcontext
 import pandas as pd
 import numpy as np
 import random
@@ -69,7 +72,7 @@ def experiment_name(args):
             '224'
         ])
 
-def train_one_epoch(model, loader, optimizer, loss_fn, gpu_aug, device):
+def train_one_epoch(args, model, loader, optimizer, loss_fn, gpu_aug, device):
     losses_m = utils.AverageMeter()
     top1_m = utils.AverageMeter()
     top5_m = utils.AverageMeter()
@@ -79,38 +82,46 @@ def train_one_epoch(model, loader, optimizer, loss_fn, gpu_aug, device):
     model.train()
 
     data_start_time = update_start_time = time.time()
-    optimizer.zero_grad()
-    for batch_idx, (input, target) in enumerate(loader):
-        data_time_m.update(time.time() - data_start_time)
-        
-        batch_size = input.shape[0]
+    optimizer.zero_grad(set_to_none=True)
 
-        input = input.to(device, non_blocking=True)
-        target = target.to(device=device)
+    prof = torch.profiler.profile(
+        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+        record_shapes=True
+    ) if False else nullcontext()
+    
+    with prof:
+        with record_function("model_inference"):
+            for batch_idx, (input, target) in enumerate(loader):
+                data_time_m.update(time.time() - data_start_time)
+                
+                batch_size = input.shape[0]
 
-        if gpu_aug is not None:
-            input = gpu_aug(input)
+                input = input.to(device, non_blocking=True)
+                target = target.to(device=device, non_blocking=True)
 
-        output = model(input)
-        if isinstance(output, (tuple, list)):
-            output = output[0]
+                if gpu_aug is not None:
+                    input = gpu_aug(input)
 
-        loss = loss_fn(output, target)
-        acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
+                output = model(input)
+                if isinstance(output, (tuple, list)):
+                    output = output[0]
 
-        loss.backward()
-        optimizer.step()
+                loss = loss_fn(output, target)
+                acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
 
-        losses_m.update(loss.item(), batch_size)
-        top1_m.update(acc1.item(), batch_size)
-        top5_m.update(acc5.item(), batch_size)
+                loss.backward()
+                optimizer.step()
 
-        optimizer.zero_grad()
+                losses_m.update(loss.item(), batch_size)
+                top1_m.update(acc1.item(), batch_size)
+                top5_m.update(acc5.item(), batch_size)
 
-        update_time_m.update(time.time() - update_start_time)
+                optimizer.zero_grad(set_to_none=True)
 
-        data_start_time = time.time()
-        update_start_time = time.time()
+                update_time_m.update(time.time() - update_start_time)
+
+                data_start_time = time.time()
+                update_start_time = time.time()
 
     throughput = top1_m.count / update_time_m.sum
     
@@ -189,6 +200,8 @@ def parse_args():
                    help='Start with pretrained version of specified network (if avail)')
     group.add_argument('--onlineaugment', action='store_true', default=False,
                    help='Online data augmentation procedure (default: False)')
+    group.add_argument('--profile', action='store_true', default=False,
+                   help='Enable profiling of cpu and torch functions (default: False)')
     
     group.add_argument('--num-classes', type=int, default=None, metavar='N',
                    help='number of label classes (Model default if None)', required=True)
@@ -222,8 +235,8 @@ def parse_args():
                    help='random seed (default: 42)')
     group.add_argument('--checkpoint-hist', type=int, default=10, metavar='N',
                    help='number of checkpoints to keep (default: 10)')
-    group.add_argument('-j', '--workers', type=int, default=4, metavar='N',
-                   help='how many training processes to use (default: 4)')
+    group.add_argument('-j', '--workers', type=int, default=32, metavar='N',
+                   help='how many training processes to use (default: 32)')
     group.add_argument('--pin-mem', action='store_true', default=False,
                    help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     group.add_argument('--output', default='', type=str, metavar='PATH',
@@ -245,6 +258,10 @@ def parse_args():
 
 def main():
     args, args_text = parse_args()
+
+    if args.profile:
+        profiler = Profiler()
+        profiler.start()
 
     if torch.cuda.is_available():
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -305,16 +322,10 @@ def main():
     args.rank = args.local_rank = 0
     data_cfg = resolve_data_config(vars(args), model=model, verbose=utils.is_primary(args))
     
-    base_train_transform = create_transform(input_size=(3,224,224), 
-                                            is_training=True, 
-                                            no_aug=True,
-                                            mean=data_cfg['mean'], 
-                                            std=data_cfg['std'])
     gpu_aug = None
 
     if args.onlineaugment:
         dataset_train.transform = v2.Compose([
-            v2.Resize((224, 224), interpolation=InterpolationMode.BILINEAR),
             v2.ToImage(),
             v2.ToDtype(torch.float32, scale=True)
         ])
@@ -330,7 +341,7 @@ def main():
             ),
             K.RandomHorizontalFlip(p=0.5),
             K.RandomVerticalFlip(p=0.5),
-            K.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02, p=0.8),
+            K.ColorJiggle(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02),
             K.Normalize(mean=mean, std=std),
         ).to(device)
 
@@ -373,6 +384,7 @@ def main():
 
     for epoch in range(0, args.epochs):
         train_metrics = train_one_epoch(
+                args,
                 model,
                 loader_train,
                 optimizer,
@@ -398,6 +410,11 @@ def main():
 
         saver.save_checkpoint(epoch, metric=eval_metrics['top1'])
         lr_scheduler.step()
+
+    if args.profile:
+        profiler.stop()
+        profiler.open_in_browser()
+        profiler.print()
 
 if __name__ == '__main__':
     main()
