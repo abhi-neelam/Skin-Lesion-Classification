@@ -24,7 +24,6 @@ from sklearn.preprocessing import label_binarize
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from imblearn.metrics import sensitivity_score, specificity_score
 import matplotlib.pyplot as plt
-import kornia.augmentation as K
 from pyinstrument import Profiler
 from functools import partial
 from collections import OrderedDict
