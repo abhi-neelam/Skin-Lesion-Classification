@@ -22,6 +22,7 @@ from torchinfo import summary
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, classification_report
 from sklearn.preprocessing import label_binarize
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.utils import class_weight
 from imblearn.metrics import sensitivity_score, specificity_score
 import matplotlib.pyplot as plt
 import kornia.augmentation as K
@@ -215,6 +216,8 @@ def parse_args():
     group = parser.add_argument_group('Optimizer parameters')
     group.add_argument('--weight-decay', type=float, default=2e-5,
                     help='weight decay (default: 2e-5)')
+    group.add_argument('--loss', required=True, default='cross_entropy', type=str, metavar='LOSS',
+                   help='Name of loss function to use (default: "cross_entropy")')
 
     group = parser.add_argument_group('Learning rate schedule parameters')
     group.add_argument('--lr', type=float, default=1e-3, metavar='LR',
@@ -356,8 +359,32 @@ def main():
         device=device
     )
     
-    train_loss_fn = nn.CrossEntropyLoss(label_smoothing=args.smoothing).to(device=device)
-    validate_loss_fn = nn.CrossEntropyLoss().to(device=device)
+    train_distribution_counts = {"AK": 3896, "BCC": 5973, "BKL": 7957, "DF": 1731, "MEL": 7831, "NV": 18293, "SCC": 3476, "VASC": 2091}
+
+    classes = sorted(train_distribution_counts.keys())
+    counts = np.array([train_distribution_counts[c] for c in classes])
+
+    total_samples = counts.sum()
+    num_classes = len(classes)
+    weights = total_samples / (num_classes * counts)
+
+    alpha_weights = torch.tensor(weights, dtype=torch.float32).to(device)
+    # calculate alpha weights from training set distribution
+
+    if args.loss == "cross_entropy":
+        train_loss_fn = nn.CrossEntropyLoss(label_smoothing=args.smoothing).to(device)
+    elif args.loss == "weighted_cross_entropy":
+        train_loss_fn = nn.CrossEntropyLoss(label_smoothing=args.smoothing, weight=alpha_weights).to(device)
+    elif args.loss == "focal":
+        train_loss_fn = torch.hub.load(
+            'adeelh/pytorch-multi-class-focal-loss',
+            model='FocalLoss',
+            alpha=alpha_weights,
+            gamma=2,
+            reduction='mean'
+        ).to(device)
+
+    validate_loss_fn = nn.CrossEntropyLoss().to(device)
 
     exp_name = experiment_name(args)
     output_dir = utils.get_outdir(args.output if args.output else './output/train', exp_name)
