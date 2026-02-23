@@ -359,7 +359,7 @@ def main():
         device=device
     )
     
-    train_distribution_counts = {"AK": 3896, "BCC": 5973, "BKL": 7957, "DF": 1731, "MEL": 7831, "NV": 18293, "SCC": 3476, "VASC": 2091}
+    train_distribution_counts = {"AK": 780, "BCC": 2987, "BKL": 2653, "DF": 347, "MEL": 3916, "NV": 18293, "SCC": 696, "VASC": 419}
 
     classes = sorted(train_distribution_counts.keys())
     counts = np.array([train_distribution_counts[c] for c in classes])
