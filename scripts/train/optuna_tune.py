@@ -44,29 +44,19 @@ def parse_args():
     group = parser.add_argument_group('Miscellaneous parameters')
     group.add_argument('--seed', type=int, default=42, metavar='S',
                    help='random seed (default: 42)')
+    group.add_argument('-j', '--workers', type=int, default=32, metavar='N',
+                   help='how many training processes to use (default: 32)')
+    
+    group.add_argument('--wandb-tags', default=[], type=str, nargs='*',
+                    help='wandb tags', required=False)
+    group.add_argument('--disable-wandb', action='store_true', default=False,
+                help='Option to disable wandb logs to online')
 
     args = parser.parse_args()
 
     return args
 
 args = parse_args()
-
-def read_best_val_top1(summary_csv: Path) -> float:
-    if not summary_csv.exists():
-        raise FileNotFoundError(f"summary.csv not found at: {summary_csv}")
-
-    df = pd.read_csv(summary_csv)
-
-    candidates = [c for c in df.columns if c.lower() in ("eval_top1", "val_top1", "valid_top1")]
-    if not candidates:
-        # fall back: try any column containing 'eval' and 'top1'
-        candidates = [c for c in df.columns if ("eval" in c.lower() and "top1" in c.lower())]
-
-    if not candidates:
-        raise ValueError(f"Could not find eval top1 column in {summary_csv}. Columns: {list(df.columns)}")
-
-    col = candidates[0]
-    return float(df[col].max())
 
 def objective(trial: optuna.Trial) -> float:
     wd = trial.suggest_categorical("weight_decay", WEIGHT_DECAYS)
@@ -103,25 +93,30 @@ def objective(trial: optuna.Trial) -> float:
         "--onlineaugment",
         "--pin-mem",
         "-b", str(args.batch_size),
-        "--workers", str(32),
+        "--workers", str(args.workers),
         "--device", args.device,
         "--seed", str(args.seed),
         "--output", str(trial_out),
         "--experiment", exp_name,
         "--wandb-project", "skin-lesion-classification",
-        "--wandb-tags", "optuna", "baseline", f"{args.model}", "pretrained", "finetuned", "isic_2019", "derm12345", "unfrozen_layers", "onfly_augmentation"
+        "--wandb-tags", "optuna", "baseline", f"{args.model}", "pretrained", "finetuned", "isic_2019", "derm12345", "unfrozen_layers", "onfly_augmentation", *args.wandb_tags
     ]
+
+    if args.disable_wandb:
+        cmd.append("--disable-wandb")
 
     # Run training
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
+        trial.set_user_attr("cmd", " ".join(cmd))
         trial.set_user_attr("stderr_tail", result.stderr[-4000:])
         trial.set_user_attr("stdout_tail", result.stdout[-4000:])
         raise RuntimeError(f"Training failed for trial {trial.number}")
 
     summary_csv = trial_dir / "summary.csv"
-    best_eval_top1 = read_best_val_top1(summary_csv)
+    df = pd.read_csv(summary_csv)
+    best_eval_top1 = float(df["eval_top1"].max())
 
     return best_eval_top1
 
