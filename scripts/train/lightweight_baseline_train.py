@@ -432,6 +432,7 @@ def main():
             train_metrics,
             eval_metrics,
             filename=os.path.join(output_dir, 'summary.csv'),
+            write_header=True,
             log_wandb=not args.disable_wandb
         )
 
