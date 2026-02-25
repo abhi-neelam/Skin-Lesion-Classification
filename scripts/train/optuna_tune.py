@@ -7,10 +7,9 @@ import argparse
 import optuna
 import pandas as pd
 
-WEIGHT_DECAYS = [0.005, 0.01, 0.02, 0.03, 0.05]
-LABEL_SMOOTH = [0.05, 0.1, 0.2, 0.3]
-LOSSES = ["cross_entropy", "weighted_cross_entropy", "focal"]
-DROPOUTS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+WEIGHT_DECAYS = [0.0, 0.0005, 0.005, 0.05, 0.5]
+LABEL_SMOOTH = [0.0, 0.05, 0.1, 0.2]
+DROPOUTS = [0.0, 0.1, 0.2, 0.3]
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Optuna Tuning')
@@ -61,7 +60,6 @@ args = parse_args()
 def objective(trial: optuna.Trial) -> float:
     wd = trial.suggest_categorical("weight_decay", WEIGHT_DECAYS)
     ls = trial.suggest_categorical("label_smoothing", LABEL_SMOOTH)
-    loss_name = trial.suggest_categorical("loss", LOSSES)
     drop = trial.suggest_categorical("dropout", DROPOUTS)
 
     out_root = Path("./optuna_logs")
@@ -69,7 +67,7 @@ def objective(trial: optuna.Trial) -> float:
 
     exp_name = (
         f"optuna_t{trial.number:03d}_{args.model}_"
-        f"wd{wd:.4g}_ls{ls:.3g}_loss{loss_name}_drop{drop:.1f}"
+        f"wd{wd:.4g}_ls{ls:.3g}_drop{drop:.1f}"
     )
 
     trial_out = out_root
@@ -83,7 +81,7 @@ def objective(trial: optuna.Trial) -> float:
         "--data-dir", args.data_dir,
         "--model", args.model,
         "--num-classes", str(args.num_classes),
-        "--loss", loss_name,
+        "--loss", "cross_entropy",
         "--weight-decay", str(wd),
         "--smoothing", str(ls),
         "--drop", str(drop),
