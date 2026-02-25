@@ -120,7 +120,7 @@ def objective(trial: optuna.Trial) -> float:
 
 if __name__ == "__main__":
     sampler = optuna.samplers.TPESampler(
-        n_startup_trials=5,
+        n_startup_trials=10,
         seed=args.seed
     )
 
