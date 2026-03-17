@@ -150,20 +150,24 @@ def can_run_batch_size(model, device, input_size, batch_size):
     if batch_size < 1:
         return False
 
+    dummy_input = None
+    features = None
+    output = None
     try:
         with torch.inference_mode():
             dummy_input = torch.randn((batch_size, *input_size), device=device)
-            _, output = forward_with_features(model, dummy_input)
-            del output
-            del dummy_input
+            features, output = forward_with_features(model, dummy_input)
             synchronize_device(device)
-        clear_device_cache(device)
         return True
-    except RuntimeError as err:
+    except (torch.OutOfMemoryError, RuntimeError) as err:
         if is_oom_error(err):
-            clear_device_cache(device)
             return False
         raise
+    finally:
+        del output
+        del features
+        del dummy_input
+        clear_device_cache(device)
 
 
 def find_max_batch_size(model, device, input_size, starting_batch_size):
@@ -172,16 +176,19 @@ def find_max_batch_size(model, device, input_size, starting_batch_size):
     if not is_cuda_device(device):
         return starting_batch_size
 
+    hard_cap = max(starting_batch_size, 2048)
+
     if can_run_batch_size(model, device, input_size, starting_batch_size):
         best_batch_size = starting_batch_size
-        failed_batch_size = None
-        probe_batch_size = starting_batch_size * 2
+        probe_batch_size = min(starting_batch_size * 2, hard_cap)
 
-        while can_run_batch_size(model, device, input_size, probe_batch_size):
+        while probe_batch_size > best_batch_size and can_run_batch_size(model, device, input_size, probe_batch_size):
             best_batch_size = probe_batch_size
-            probe_batch_size *= 2
+            if probe_batch_size >= hard_cap:
+                break
+            probe_batch_size = min(probe_batch_size * 2, hard_cap)
 
-        failed_batch_size = probe_batch_size
+        failed_batch_size = probe_batch_size if probe_batch_size > best_batch_size else best_batch_size + 1
         low, high = best_batch_size + 1, failed_batch_size - 1
     else:
         best_batch_size = 0
@@ -202,27 +209,45 @@ def find_max_batch_size(model, device, input_size, starting_batch_size):
 
 
 def benchmark_throughput(model, device, input_size, batch_size, warmup_iters=10, benchmark_iters=30):
-    dummy_input = torch.randn((batch_size, *input_size), device=device)
+    while batch_size >= 1:
+        dummy_input = None
+        features = None
+        output = None
+        try:
+            dummy_input = torch.randn((batch_size, *input_size), device=device)
+            with torch.inference_mode():
+                for _ in range(max(0, warmup_iters)):
+                    features, output = forward_with_features(model, dummy_input)
+                    del output
+                    del features
+                    output = None
+                    features = None
 
-    with torch.inference_mode():
-        for _ in range(max(0, warmup_iters)):
-            _, output = forward_with_features(model, dummy_input)
+                synchronize_device(device)
+                start_time = time.perf_counter()
+                for _ in range(max(1, benchmark_iters)):
+                    features, output = forward_with_features(model, dummy_input)
+                    del output
+                    del features
+                    output = None
+                    features = None
+                synchronize_device(device)
+                total_time = time.perf_counter() - start_time
+
+            avg_latency = total_time / max(1, benchmark_iters)
+            throughput = batch_size / avg_latency if avg_latency > 0 else 0.0
+            return throughput, avg_latency, batch_size
+        except (torch.OutOfMemoryError, RuntimeError) as err:
+            if not is_oom_error(err):
+                raise
+            batch_size //= 2
+        finally:
             del output
+            del features
+            del dummy_input
+            clear_device_cache(device)
 
-        synchronize_device(device)
-        start_time = time.perf_counter()
-        for _ in range(max(1, benchmark_iters)):
-            _, output = forward_with_features(model, dummy_input)
-            del output
-        synchronize_device(device)
-        total_time = time.perf_counter() - start_time
-
-    del dummy_input
-    clear_device_cache(device)
-
-    avg_latency = total_time / max(1, benchmark_iters)
-    throughput = batch_size / avg_latency if avg_latency > 0 else 0.0
-    return throughput, avg_latency
+    raise RuntimeError('Unable to benchmark throughput even with batch size 1 on the selected device.')
 
 
 def validate(args):
@@ -252,7 +277,7 @@ def validate(args):
     model.eval()
 
     throughput_batch_size = find_max_batch_size(model, device, input_size, args.batch_size)
-    throughput, throughput_latency = benchmark_throughput(
+    throughput, throughput_latency, throughput_batch_size = benchmark_throughput(
         model,
         device,
         input_size,
